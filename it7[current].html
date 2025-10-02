@@ -3042,7 +3042,6 @@
     function openInventory() {
       inventoryOpen = true;
       document.getElementById('inventoryPanel').classList.add('active');
-      renderInventory();
       renderTarkovInventory();
     }
 
@@ -3396,8 +3395,6 @@
       const gridSize = { width: itemWidth, height: itemHeight };
       const canPlace = canPlaceItemAt(gridPos.col, gridPos.row, gridSize, dragState.itemId);
       
-      highlightGridCells(gridPos.col, gridPos.row, itemWidth, itemHeight, canPlace);
-    }
       highlightGridCells(gridPos.col, gridPos.row, itemWidth, itemHeight, canPlace);
     }
     
