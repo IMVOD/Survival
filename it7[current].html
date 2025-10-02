@@ -1237,16 +1237,17 @@
     }
     
     // Check if item can fit at grid position
-    function canPlaceItemAt(item, gridRow, gridCol) {
+    function canPlaceItemAt(gridCol, gridRow, gridSize, excludeItemId = null) {
       const backpack = inventory.backpack || BACKPACKS.starter;
-      const itemWidth = item.gridWidth || 1;
-      const itemHeight = item.gridHeight || 1;
+      const itemWidth = gridSize.width || gridSize.gridWidth || 1;
+      const itemHeight = gridSize.height || gridSize.gridHeight || 1;
       if (gridRow + itemHeight > backpack.rows || gridCol + itemWidth > backpack.cols) {
         return false;
       }
       for (let r = gridRow; r < gridRow + itemHeight; r++) {
         for (let c = gridCol; c < gridCol + itemWidth; c++) {
-          if (inventory.backpackGrid[r][c] !== null) {
+          const cellContent = inventory.backpackGrid[r][c];
+          if (cellContent !== null && cellContent !== excludeItemId) {
             return false;
           }
         }
@@ -1255,16 +1256,27 @@
     }
     
     // Place item in grid
-    function placeItemInGrid(item, gridRow, gridCol) {
-      if (!canPlaceItemAt(item, gridRow, gridCol)) return false;
+    function placeItemInGrid(item, gridCol, gridRow, existingItemId = null) {
       const itemWidth = item.gridWidth || 1;
       const itemHeight = item.gridHeight || 1;
-      const itemId = 'item_' + Date.now() + '_' + Math.random();
+      const gridSize = { width: itemWidth, height: itemHeight };
+      if (!canPlaceItemAt(gridCol, gridRow, gridSize, existingItemId)) return false;
+      
+      const itemId = existingItemId || 'item_' + Date.now() + '_' + Math.random();
       for (let r = gridRow; r < gridRow + itemHeight; r++) {
         for (let c = gridCol; c < gridCol + itemWidth; c++) {
           inventory.backpackGrid[r][c] = itemId;
         }
       }
+      
+      // Remove existing item if updating position
+      if (existingItemId) {
+        const existingIndex = inventory.gridItems.findIndex(i => i.id === existingItemId);
+        if (existingIndex !== -1) {
+          inventory.gridItems.splice(existingIndex, 1);
+        }
+      }
+      
       inventory.gridItems.push({
         id: itemId,
         item: item,
@@ -1295,9 +1307,10 @@
       const backpack = inventory.backpack || BACKPACKS.starter;
       const itemWidth = item.gridWidth || 1;
       const itemHeight = item.gridHeight || 1;
+      const gridSize = { width: itemWidth, height: itemHeight };
       for (let row = 0; row <= backpack.rows - itemHeight; row++) {
         for (let col = 0; col <= backpack.cols - itemWidth; col++) {
-          if (canPlaceItemAt(item, row, col)) {
+          if (canPlaceItemAt(col, row, gridSize)) {
             return { row, col };
           }
         }
@@ -1960,9 +1973,21 @@
     }
 
     function startReload(weapon) {
-      if (!weapon || weapon.reloading || weapon.reserve <= 0 || weapon.mag === weapon.magSize) return;
+      if (!weapon || weapon.reloading || weapon.weaponType === 'melee') return;
+      if (weapon.mag === weapon.magSize) return;
+      
+      // Find a magazine with ammo in the vest
+      const weaponAmmoType = getWeaponAmmoType(weapon);
+      const magIndex = inventory.magazineSlots.findIndex(m => m && m.ammoType === weaponAmmoType && m.currentAmmo > 0);
+      
+      if (magIndex === -1) {
+        showNotification('❌ No magazines available!');
+        return;
+      }
+      
       weapon.reloading = true;
       weapon.reloadStart = performance.now();
+      weapon.reloadMagIndex = magIndex;
       playSound('reload');
     }
 
@@ -1970,11 +1995,37 @@
       if (!weapon || !weapon.reloading) return;
       const elapsed = performance.now() - weapon.reloadStart;
       if (elapsed >= weapon.reloadTime) {
-        const needed = weapon.magSize - weapon.mag;
-        const toReload = Math.min(needed, weapon.reserve);
-        weapon.mag += toReload;
-        weapon.reserve -= toReload;
+        // Swap magazines: put current mag back in vest, equip the new one
+        const magIndex = weapon.reloadMagIndex;
+        const newMag = inventory.magazineSlots[magIndex];
+        
+        if (newMag) {
+          // Create magazine object from current weapon ammo
+          const weaponAmmoType = getWeaponAmmoType(weapon);
+          const currentMag = {
+            id: 'magazine_' + Date.now(),
+            name: weaponAmmoType.charAt(0).toUpperCase() + weaponAmmoType.slice(1) + ' Magazine',
+            icon: '📋',
+            type: 'magazine',
+            magType: weaponAmmoType,
+            ammoType: weaponAmmoType,
+            capacity: weapon.magSize,
+            currentAmmo: weapon.mag,
+            gridWidth: 1,
+            gridHeight: 2,
+            rarity: 'common'
+          };
+          
+          // Swap magazines
+          weapon.mag = newMag.currentAmmo;
+          inventory.magazineSlots[magIndex] = currentMag;
+          
+          showNotification(`🔄 Reloaded (${newMag.currentAmmo} rounds)`);
+          renderTarkovInventory();
+        }
+        
         weapon.reloading = false;
+        weapon.reloadMagIndex = undefined;
       }
     }
 
@@ -2855,9 +2906,9 @@
       if (currency >= weapon.price) {
         currency -= weapon.price;
         
-        // Reset weapon state
+        // Reset weapon state - no reserve ammo, magazine system only
         weapon.mag = weapon.magSize;
-        weapon.reserve = weapon.magSize * 3;
+        weapon.reserve = 0;
         weapon.lastShot = 0;
         weapon.reloading = false;
         weapon.reloadStart = 0;
@@ -2866,16 +2917,19 @@
         if (weapon.slot === 1) {
           if (inventory.slot1) inventory.storedWeapons.push(inventory.slot1);
           inventory.slot1 = weapon;
+          inventory.primaryWeapon = weapon;
           inventory.currentSlot = 1;
           currentWeapon = weapon;
         } else if (weapon.slot === 2) {
           if (inventory.slot2) inventory.storedWeapons.push(inventory.slot2);
           inventory.slot2 = weapon;
+          inventory.secondaryWeapon = weapon;
           inventory.currentSlot = 2;
           currentWeapon = weapon;
         } else if (weapon.slot === 3) {
           if (inventory.slot3) inventory.storedWeapons.push(inventory.slot3);
           inventory.slot3 = weapon;
+          inventory.meleeWeapon = weapon;
         }
         
         showNotification(`✅ Purchased ${weapon.name}`);
@@ -2936,8 +2990,30 @@
     function buyAmmo(type, amount, cost) {
       if (currency >= cost) {
         currency -= cost;
-        inventory.storedAmmo[type] += amount;
-        showNotification(`✅ Purchased ${amount} ${type} ammo`);
+        
+        // Create an ammo box and add to backpack
+        const ammoBoxData = AMMO_BOXES[type];
+        if (!ammoBoxData) {
+          showNotification('❌ Invalid ammo type!');
+          return;
+        }
+        
+        const ammoBox = {
+          ...ammoBoxData,
+          id: 'ammo_' + Date.now() + '_' + Math.random(),
+          type: 'ammoBox',
+          amount: amount
+        };
+        
+        const pos = findEmptyPositionForItem(ammoBox);
+        if (pos) {
+          placeItemInGrid(ammoBox, pos.col, pos.row);
+          showNotification(`✅ Purchased ${amount} ${type} ammo - added to backpack`);
+        } else {
+          showNotification('❌ No space in backpack!');
+          currency += cost; // Refund
+        }
+        
         renderShop();
       } else {
         showNotification('❌ Not enough money!');
@@ -2966,7 +3042,6 @@
     function openInventory() {
       inventoryOpen = true;
       document.getElementById('inventoryPanel').classList.add('active');
-      renderInventory();
       renderTarkovInventory();
     }
 
@@ -2995,7 +3070,6 @@
               <div class="stat-detail"><span>Damage:</span><span>${weapon.damage}</span></div>
               <div class="stat-detail"><span>Range:</span><span>${weapon.aimRange}</span></div>
               <div class="stat-detail"><span>Magazine:</span><span>${weapon.mag} / ${weapon.magSize}</span></div>
-              <div class="stat-detail"><span>Reserve:</span><span>${weapon.reserve}</span></div>
             </div>
           `;
         }
@@ -3020,23 +3094,6 @@
         html += '</div></div>';
       }
       
-      // Stored ammo
-      html += '<div class="inv-section">';
-      html += '<div class="inv-title">📦 Stored Ammo (Click to Transfer)</div>';
-      html += '<div class="inv-grid">';
-      for (const [type, amount] of Object.entries(inventory.storedAmmo)) {
-        if (amount > 0) {
-          html += `
-            <div class="inv-item" onclick="transferAmmo('${type}')">
-              <div style="font-size:24px">🔫</div>
-              <div style="font-weight:700;margin-top:8px">${type.toUpperCase()}</div>
-              <div style="color:#ffd700;font-size:18px;margin-top:4px">${amount} rounds</div>
-            </div>
-          `;
-        }
-      }
-      html += '</div></div>';
-      
       if (player.armor) {
         html += '<div class="inv-section">';
         html += '<div class="inv-title">🛡️ Armor</div>';
@@ -3051,68 +3108,6 @@
       }
       
       content.innerHTML = html;
-    }
-
-    // NEW: Equip weapon from storage
-    function equipFromStorage(idx) {
-      const weapon = inventory.storedWeapons[idx];
-      if (!weapon) return;
-      
-      const targetSlot = weapon.slot;
-      
-      // Swap with current weapon in that slot
-      if (targetSlot === 1) {
-        if (inventory.slot1) inventory.storedWeapons.push(inventory.slot1);
-        inventory.slot1 = weapon;
-        inventory.currentSlot = 1;
-        currentWeapon = weapon;
-      } else if (targetSlot === 2) {
-        if (inventory.slot2) inventory.storedWeapons.push(inventory.slot2);
-        inventory.slot2 = weapon;
-        inventory.currentSlot = 2;
-        currentWeapon = weapon;
-      } else if (targetSlot === 3) {
-        if (inventory.slot3) inventory.storedWeapons.push(inventory.slot3);
-        inventory.slot3 = weapon;
-        inventory.currentSlot = 3;
-        currentWeapon = weapon;
-      }
-      
-      inventory.storedWeapons.splice(idx, 1);
-      showNotification(`✅ Equipped ${weapon.name}`);
-      renderInventory();
-    }
-
-    // NEW: Transfer ammo from storage to current weapon
-    function transferAmmo(type) {
-      if (!currentWeapon) {
-        showNotification('❌ No weapon equipped!');
-        return;
-      }
-      
-      // Determine weapon ammo type
-      let weaponAmmoType = null;
-      if (currentWeapon.weaponType === 'pistol') weaponAmmoType = 'pistol';
-      else if (currentWeapon.weaponType === 'rifle') weaponAmmoType = 'rifle';
-      else if (currentWeapon.weaponType === 'shotgun') weaponAmmoType = 'shotgun';
-      else if (currentWeapon.weaponType === 'sniper') weaponAmmoType = 'sniper';
-      
-      if (weaponAmmoType !== type) {
-        showNotification(`❌ ${currentWeapon.name} uses ${weaponAmmoType} ammo!`);
-        return;
-      }
-      
-      if (inventory.storedAmmo[type] <= 0) {
-        showNotification('❌ No ammo to transfer!');
-        return;
-      }
-      
-      const transferAmount = Math.min(inventory.storedAmmo[type], currentWeapon.magSize * 3);
-      currentWeapon.reserve += transferAmount;
-      inventory.storedAmmo[type] -= transferAmount;
-      
-      showNotification(`✅ Transferred ${transferAmount} ${type} ammo`);
-      renderInventory();
     }
 
     // TARKOV-STYLE INVENTORY RENDERING FUNCTIONS
@@ -3227,7 +3222,7 @@
       if (!container) return;
       
       const vest = inventory.vest || VESTS.starter;
-      const slotCount = vest.magazineSlots;
+      const slotCount = vest.magSlots;
       
       if (!inventory.magazineSlots) inventory.magazineSlots = [];
       
@@ -3395,7 +3390,9 @@
         return;
       }
       
-      const gridSize = dragState.item.gridSize || { width: 1, height: 1 };
+      const itemWidth = dragState.item.gridWidth || 1;
+      const itemHeight = dragState.item.gridHeight || 1;
+      const gridSize = { width: itemWidth, height: itemHeight };
       const canPlace = canPlaceItemAt(gridPos.col, gridPos.row, gridSize, dragState.itemId);
       
       highlightGridCells(gridPos.col, gridPos.row, itemWidth, itemHeight, canPlace);
@@ -3451,7 +3448,9 @@
         return;
       }
       
-      const gridSize = dragState.item.gridSize || { width: 1, height: 1 };
+      const itemWidth = dragState.item.gridWidth || 1;
+      const itemHeight = dragState.item.gridHeight || 1;
+      const gridSize = { width: itemWidth, height: itemHeight };
       const canPlace = canPlaceItemAt(gridPos.col, gridPos.row, gridSize, dragState.itemId);
       
       if (canPlace) {
@@ -3565,22 +3564,43 @@ function dropItemInWorld(item, sourceType) {
     inventory.primaryWeapon = null;
     inventory.slot1 = null;
     if (inventory.currentSlot === 1) {
-      inventory.currentSlot = 2;
-      currentWeapon = inventory.slot2 || inventory.slot3;
+      if (inventory.slot2) {
+        inventory.currentSlot = 2;
+        currentWeapon = inventory.slot2;
+      } else if (inventory.slot3) {
+        inventory.currentSlot = 3;
+        currentWeapon = inventory.slot3;
+      } else {
+        currentWeapon = null;
+      }
     }
   } else if (sourceType === 'secondary') {
     inventory.secondaryWeapon = null;
     inventory.slot2 = null;
     if (inventory.currentSlot === 2) {
-      inventory.currentSlot = 3;
-      currentWeapon = inventory.slot3;
+      if (inventory.slot1) {
+        inventory.currentSlot = 1;
+        currentWeapon = inventory.slot1;
+      } else if (inventory.slot3) {
+        inventory.currentSlot = 3;
+        currentWeapon = inventory.slot3;
+      } else {
+        currentWeapon = null;
+      }
     }
   } else if (sourceType === 'melee') {
     inventory.meleeWeapon = null;
     inventory.slot3 = null;
     if (inventory.currentSlot === 3) {
-      inventory.currentSlot = 2;
-      currentWeapon = inventory.slot2;
+      if (inventory.slot2) {
+        inventory.currentSlot = 2;
+        currentWeapon = inventory.slot2;
+      } else if (inventory.slot1) {
+        inventory.currentSlot = 1;
+        currentWeapon = inventory.slot1;
+      } else {
+        currentWeapon = null;
+      }
     }
   } else if (sourceType === 'vest') {
     inventory.vest = VESTS.starter;
@@ -3792,26 +3812,26 @@ function fillMagazineWithAmmo(ammoBox, gridItemId) {
 }
 
 function equipWeaponFromGrid(weapon, gridItemId) {
-  const slotType = weapon.type;
+  const slotType = weapon.slot;
   
   let targetSlot = null;
   let currentEquipped = null;
   
-  if (slotType === 'primary') {
+  if (slotType === 1) {
     targetSlot = 'primary';
     currentEquipped = inventory.primaryWeapon;
     inventory.primaryWeapon = weapon;
     inventory.slot1 = weapon;
     inventory.currentSlot = 1;
     currentWeapon = weapon;
-  } else if (slotType === 'secondary') {
+  } else if (slotType === 2) {
     targetSlot = 'secondary';
     currentEquipped = inventory.secondaryWeapon;
     inventory.secondaryWeapon = weapon;
     inventory.slot2 = weapon;
     inventory.currentSlot = 2;
     currentWeapon = weapon;
-  } else if (slotType === 'melee') {
+  } else if (slotType === 3) {
     targetSlot = 'melee';
     currentEquipped = inventory.meleeWeapon;
     inventory.meleeWeapon = weapon;
@@ -3823,7 +3843,7 @@ function equipWeaponFromGrid(weapon, gridItemId) {
   if (currentEquipped) {
     const pos = findEmptyPositionForItem(currentEquipped);
     if (pos) {
-      placeItemInGrid(currentEquipped, pos.row, pos.col);
+      placeItemInGrid(currentEquipped, pos.col, pos.row);
     }
   }
   
@@ -4005,6 +4025,7 @@ function setupStartingLoadout() {
   inventory.secondaryWeapon = pistol;
   inventory.slot2 = pistol;
   
+  // Start with 3 full magazines in vest
   for (let i = 0; i < 3; i++) {
     inventory.magazineSlots[i] = {
       id: 'magazine_start_' + i,
