@@ -1,0 +1,4166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Zombie Survival - Enhanced Edition</title>
+  <style>
+    :root{
+      --hud-bg: rgba(6,10,18,0.95);
+      --accent:#00ff88;
+      --gold:#ffd700;
+      --panel-bg: rgba(12,16,28,0.98);
+      --danger: #ff4444;
+      --cod-green: #00ff88;
+      --cod-dark: #0a0f14;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html,body{
+      height:100%;
+      font-family:'Rajdhani','Segoe UI',system-ui,Roboto,Arial,sans-serif;
+      background:#000;
+      color:#e9eef8;
+      overflow:hidden;
+    }
+    canvas { display:block; width:100vw; height:100vh; background:#0a0e14; cursor:crosshair; }
+
+    /* Damage Indicator */
+    #damageIndicator {
+      position:fixed; inset:0; pointer-events:none; z-index:999;
+      border:8px solid rgba(255,0,0,0); transition:border-color 0.3s;
+    }
+    #damageIndicator.active {
+      border-color:rgba(255,0,0,0.6);
+      animation:damageFlash 0.3s ease-out;
+    }
+    @keyframes damageFlash {
+      0% { border-color:rgba(255,0,0,0.8); border-width:15px; }
+      100% { border-color:rgba(255,0,0,0); border-width:8px; }
+    }
+
+    /* Hit Marker */
+    #hitMarker {
+      position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+      pointer-events:none; z-index:998; display:none; opacity:0;
+    }
+    #hitMarker.active {
+      display:block; opacity:1;
+      animation:hitMarkerFade 0.2s ease-out;
+    }
+    @keyframes hitMarkerFade {
+      0% { opacity:1; transform:translate(-50%, -50%) scale(1.3); }
+      100% { opacity:0; transform:translate(-50%, -50%) scale(1); }
+    }
+    .hit-cross {
+      position:absolute; background:#fff;
+      box-shadow:0 0 8px rgba(255,68,68,0.8);
+    }
+    .hit-cross-h { width:20px; height:2px; left:-10px; top:-1px; }
+    .hit-cross-v { width:2px; height:20px; left:-1px; top:-10px; }
+
+    /* Loot Box Prompt */
+    #lootPrompt {
+      position:fixed; top:60%; left:50%; transform:translate(-50%, -50%);
+      background:var(--panel-bg); padding:15px 30px; font-size:16px; font-weight:700; z-index:250;
+      border:2px solid var(--cod-green); box-shadow:0 0 25px rgba(0,255,136,0.4);
+      clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
+      display:none; animation:promptPulse 1.5s ease-in-out infinite;
+    }
+    #lootPrompt.active { display:block; }
+    @keyframes promptPulse {
+      0%, 100% { transform:translate(-50%, -50%) scale(1); }
+      50% { transform:translate(-50%, -50%) scale(1.05); }
+    }
+
+    /* COD-Style HUD */
+    #hud {
+      position:fixed; left:50%; transform:translateX(-50%); bottom:30px; z-index:50;
+      display:flex; gap:30px; align-items:flex-end; padding:20px 30px;
+      background:linear-gradient(135deg, rgba(6,10,18,0.95), rgba(10,15,22,0.95));
+      border-radius:4px; border:1px solid rgba(0,255,136,0.3);
+      box-shadow:0 0 20px rgba(0,255,136,0.15), 0 8px 32px rgba(0,0,0,0.8);
+      backdrop-filter:blur(10px);
+    }
+    .hud-section { display:flex; flex-direction:column; gap:8px; }
+    .stat-row { display:flex; align-items:center; gap:8px; font-size:14px; color:#c8d9ee; font-weight:600; }
+    .stat-label { color:#00ff88; text-transform:uppercase; letter-spacing:1px; font-size:11px; }
+    .stat-value { font-weight:700; color:#fff; font-size:18px; }
+
+    /* Weapon Slots - COD Style */
+    #weaponSlots { display:flex; gap:10px; margin-top:6px; }
+    .weapon-slot {
+      width:55px; height:55px; border:2px solid rgba(0,255,136,0.2);
+      background:rgba(0,255,136,0.05); display:flex; align-items:center; justify-content:center;
+      font-size:11px; position:relative; transition:all 0.2s; clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%, 0 8%);
+    }
+    .weapon-slot.active {
+      border-color:var(--cod-green); background:rgba(0,255,136,0.15);
+      box-shadow:0 0 15px rgba(0,255,136,0.4), inset 0 0 10px rgba(0,255,136,0.2);
+    }
+    .weapon-slot.empty { opacity:0.3; }
+    .slot-number { position:absolute; top:3px; left:5px; font-size:10px; color:#00ff88; font-weight:700; }
+    .weapon-icon { font-size:22px; line-height:1; display:flex; align-items:center; justify-content:center; }
+    .weapon-icon svg { width:24px; height:24px; fill:#cfd8e3; filter: drop-shadow(0 0 2px rgba(0,255,136,0.2)); }
+
+    /* Ammo Display - COD Style */
+    #ammoDisplay { font-family:'Orbitron',ui-monospace,monospace; font-size:28px; font-weight:900; text-align:center; color:#00ff88; text-shadow:0 0 10px rgba(0,255,136,0.5); }
+    #reserveAmmo { font-size:13px; color:#9fb4d8; text-align:center; font-weight:600; }
+
+    /* Health Bar - COD Style */
+    .health-bar {
+      width:160px; height:24px; background:rgba(0,0,0,0.6);
+      border:2px solid rgba(0,255,136,0.3); overflow:hidden;
+      clip-path: polygon(5% 0, 100% 0, 100% 100%, 0 100%, 0 5%);
+    }
+    .health-fill {
+      height:100%; background:linear-gradient(90deg, #ff4444, #ff8844); 
+      transition:width 0.3s; box-shadow:0 0 10px rgba(255,68,68,0.5);
+    }
+
+    /* Minimap - Enhanced */
+    #minimap {
+      position:fixed; top:20px; right:20px; width:220px; height:220px;
+      background:var(--panel-bg); border:2px solid rgba(0,255,136,0.3);
+      overflow:hidden; z-index:40; clip-path: polygon(10% 0, 100% 0, 100% 90%, 90% 100%, 0 100%, 0 10%);
+      box-shadow:0 0 15px rgba(0,255,136,0.2);
+    }
+    #minimapCanvas { width:100%; height:100%; }
+
+    /* Top HUD - COD Style */
+    #topHud {
+      position:fixed; top:20px; left:20px; z-index:50;
+      display:flex; flex-direction:column; gap:12px;
+    }
+    .top-stat {
+      background:linear-gradient(135deg, rgba(6,10,18,0.95), rgba(10,15,22,0.95));
+      padding:10px 18px; clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%, 0 8%);
+      backdrop-filter:blur(10px); display:flex; align-items:center; gap:12px;
+      border:1px solid rgba(0,255,136,0.3); box-shadow:0 0 10px rgba(0,255,136,0.15);
+    }
+    .currency { color:var(--gold); font-weight:900; font-size:20px; }
+    .day-cycle { font-size:15px; font-weight:700; }
+    .day-number { color:var(--cod-green); font-weight:900; }
+
+    /* Clock Display */
+    #clockDisplay {
+      background:linear-gradient(135deg, rgba(6,10,18,0.95), rgba(10,15,22,0.95));
+      padding:8px 16px; clip-path: polygon(8% 0, 100% 0, 100% 100%, 0 100%, 0 8%);
+      backdrop-filter:blur(10px); border:1px solid rgba(0,255,136,0.3);
+      box-shadow:0 0 10px rgba(0,255,136,0.15); display:flex; align-items:center; gap:10px;
+      font-weight:700; font-size:14px;
+    }
+    .clock-time { color:#00ff88; font-family:'Orbitron',monospace; font-size:18px; }
+
+    /* Button Panel - COD Style Bottom Right */
+    #buttonPanel {
+      position:fixed; bottom:30px; right:30px; z-index:50;
+      display:flex; flex-direction:column; gap:10px;
+    }
+    .panel-btn {
+      padding:12px 20px; background:linear-gradient(135deg, rgba(0,255,136,0.15), rgba(0,255,136,0.05));
+      border:2px solid rgba(0,255,136,0.4); color:#00ff88; font-weight:900;
+      cursor:pointer; font-size:13px; text-transform:uppercase; letter-spacing:1px;
+      transition:all 0.2s; clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      display:flex; align-items:center; gap:8px; justify-content:center;
+      box-shadow:0 0 10px rgba(0,255,136,0.2);
+    }
+    .panel-btn:hover {
+      background:linear-gradient(135deg, rgba(0,255,136,0.3), rgba(0,255,136,0.15));
+      box-shadow:0 0 20px rgba(0,255,136,0.4);
+      transform:translateX(-5px);
+    }
+
+    /* Wave Alert */
+    #waveAlert {
+      position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+      background:linear-gradient(135deg, rgba(255,68,68,0.95), rgba(255,136,68,0.95));
+      padding:30px 60px; font-size:32px; font-weight:900; z-index:300;
+      border:3px solid #fff; box-shadow:0 0 30px rgba(255,68,68,0.8);
+      display:none; text-transform:uppercase; letter-spacing:2px;
+      clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
+    }
+    #waveAlert.active { display:block; animation:pulse 0.5s ease-in-out; }
+    @keyframes pulse { 0%, 100% { transform:translate(-50%, -50%) scale(1); } 50% { transform:translate(-50%, -50%) scale(1.1); } }
+
+    /* Tarkov-Style Inventory Panel */
+    #inventoryPanel {
+      position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+      background:var(--panel-bg); border:2px solid rgba(0,255,136,0.4);
+      padding:24px; z-index:150; display:none;
+      width:95vw; max-width:1400px; height:85vh;
+      clip-path: polygon(2% 0, 100% 0, 100% 98%, 98% 100%, 0 100%, 0 2%);
+      box-shadow:0 0 40px rgba(0,255,136,0.3);
+    }
+    #inventoryPanel.active { display:flex; flex-direction:column; }
+    
+    .inv-header { 
+      font-size:26px; font-weight:900; color:var(--cod-green); 
+      margin-bottom:20px; text-align:center; text-transform:uppercase; 
+      letter-spacing:3px; border-bottom:2px solid rgba(0,255,136,0.3); padding-bottom:12px;
+    }
+    
+    .inv-container {
+      display:flex; gap:20px; flex:1; overflow:hidden;
+    }
+    
+    /* Left Column - Character & Equipment */
+    .inv-left {
+      width:320px; display:flex; flex-direction:column; gap:12px;
+    }
+    
+    .character-display {
+      background:rgba(0,255,136,0.03); border:1px solid rgba(0,255,136,0.2);
+      padding:16px; text-align:center; clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
+    }
+    
+    .character-display canvas {
+      width:100%; height:200px; background:rgba(0,0,0,0.3);
+    }
+    
+    .equipment-slots {
+      display:grid; grid-template-columns:1fr 1fr; gap:10px; flex:1;
+    }
+    
+    .equipment-slot {
+      background:rgba(0,255,136,0.03); border:2px solid rgba(0,255,136,0.2);
+      padding:12px; cursor:pointer; transition:all 0.2s; position:relative;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      min-height:80px;
+    }
+    
+    .equipment-slot:hover {
+      border-color:var(--cod-green); background:rgba(0,255,136,0.1);
+    }
+    
+    .equipment-slot.filled {
+      border-color:rgba(0,255,136,0.5);
+    }
+    
+    .equipment-slot-label {
+      font-size:10px; color:#9fb4d8; text-transform:uppercase; 
+      letter-spacing:1px; margin-bottom:4px;
+    }
+    
+    .equipment-slot-item {
+      font-size:32px; margin:8px 0;
+    }
+    
+    .equipment-slot-name {
+      font-size:11px; color:var(--cod-green); font-weight:700;
+      text-align:center; max-width:100%;
+    }
+    
+    /* Right Column - Backpack & Vest */
+    .inv-right {
+      flex:1; display:flex; flex-direction:column; gap:16px; overflow-y:auto;
+    }
+    
+    .backpack-section, .vest-section {
+      background:rgba(0,255,136,0.03); border:1px solid rgba(0,255,136,0.2);
+      padding:16px; clip-path: polygon(3% 0, 100% 0, 100% 97%, 97% 100%, 0 100%, 0 3%);
+    }
+    
+    .inv-section-title {
+      font-size:16px; font-weight:800; color:#c8d9ee; 
+      text-transform:uppercase; margin-bottom:12px; letter-spacing:2px;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    
+    .backpack-grid-container {
+      background:rgba(0,0,0,0.4); border:2px solid rgba(0,255,136,0.25);
+      padding:4px; display:inline-block; position:relative;
+    }
+    
+    .backpack-grid {
+      display:grid; gap:2px; position:relative;
+    }
+    
+    .grid-cell {
+      width:48px; height:48px; background:rgba(0,255,136,0.05); 
+      border:1px solid rgba(0,255,136,0.15); position:relative;
+      transition:all 0.15s;
+    }
+    
+    .grid-cell:hover {
+      background:rgba(0,255,136,0.12); border-color:rgba(0,255,136,0.4);
+    }
+    
+    .grid-cell.occupied {
+      background:rgba(0,255,136,0.15); border-color:rgba(0,255,136,0.3);
+    }
+    
+    .grid-cell.invalid {
+      background:rgba(255,68,68,0.2); border-color:rgba(255,68,68,0.5);
+    }
+    
+    .grid-item {
+      position:absolute; background:rgba(10,15,20,0.95); 
+      border:2px solid rgba(0,255,136,0.4);
+      display:flex; align-items:center; justify-content:center;
+      cursor:grab; transition:all 0.15s; z-index:1;
+      clip-path: polygon(6% 0, 100% 0, 100% 94%, 94% 100%, 0 100%, 0 6%);
+    }
+    
+    .grid-item:active { cursor:grabbing; }
+    
+    .grid-item:hover {
+      border-color:var(--cod-green); transform:scale(1.05);
+      box-shadow:0 0 15px rgba(0,255,136,0.4); z-index:2;
+    }
+    
+    .grid-item.dragging {
+      opacity:0.7; transform:scale(1.1); z-index:10;
+    }
+    
+    .grid-item-content {
+      display:flex; flex-direction:column; align-items:center; 
+      justify-content:center; padding:4px; text-align:center;
+    }
+    
+    .grid-item-icon {
+      font-size:28px; line-height:1;
+    }
+    
+    .grid-item-name {
+      font-size:9px; color:#9fb4d8; margin-top:2px; 
+      font-weight:600; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+    }
+    
+    .grid-item-ammo {
+      font-size:10px; color:var(--gold); font-weight:700; margin-top:2px;
+    }
+    
+    .grid-item.rarity-common { border-color:#9e9e9e; }
+    .grid-item.rarity-uncommon { border-color:#4caf50; }
+    .grid-item.rarity-rare { border-color:#2196f3; }
+    .grid-item.rarity-epic { border-color:#9c27b0; }
+    .grid-item.rarity-legendary { border-color:#ff9800; }
+    
+    /* Magazine Slots */
+    .mag-slots-container {
+      display:flex; gap:8px; flex-wrap:wrap;
+    }
+    
+    .mag-slot {
+      width:60px; height:100px; background:rgba(0,255,136,0.05);
+      border:2px solid rgba(0,255,136,0.2); cursor:pointer;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      display:flex; align-items:center; justify-content:center;
+      flex-direction:column; gap:4px; transition:all 0.2s; position:relative;
+    }
+    
+    .mag-slot:hover {
+      border-color:var(--cod-green); background:rgba(0,255,136,0.12);
+    }
+    
+    .mag-slot.filled {
+      border-color:rgba(0,255,136,0.5); background:rgba(0,255,136,0.1);
+    }
+    
+    .mag-slot-icon {
+      font-size:32px;
+    }
+    
+    .mag-slot-ammo {
+      font-size:11px; color:var(--gold); font-weight:700;
+    }
+    
+    .mag-slot-type {
+      font-size:9px; color:#9fb4d8; text-transform:uppercase;
+    }
+    
+    /* Drop Mode */
+    .drop-mode-btn {
+      padding:8px 16px; background:rgba(255,68,68,0.15); 
+      border:2px solid rgba(255,68,68,0.4); color:#ff6666;
+      cursor:pointer; font-size:12px; font-weight:700;
+      text-transform:uppercase; transition:all 0.2s;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+    }
+    
+    .drop-mode-btn:hover {
+      background:rgba(255,68,68,0.25); border-color:#ff4444;
+    }
+    
+    .drop-mode-btn.active {
+      background:rgba(255,68,68,0.3); border-color:#ff4444;
+      box-shadow:0 0 15px rgba(255,68,68,0.4);
+    }
+    
+    /* Item Tooltip */
+    .item-tooltip {
+      position:absolute; background:rgba(10,15,20,0.98); 
+      border:2px solid rgba(0,255,136,0.5); padding:12px; 
+      z-index:1000; pointer-events:none; min-width:200px;
+      clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
+      box-shadow:0 0 20px rgba(0,255,136,0.3);
+    }
+    
+    .tooltip-title {
+      font-size:16px; font-weight:900; color:var(--cod-green);
+      margin-bottom:8px;
+    }
+    
+    .tooltip-stat {
+      font-size:12px; color:#c8d9ee; margin:4px 0;
+      display:flex; justify-content:space-between;
+    }
+    
+    .tooltip-desc {
+      font-size:11px; color:#9fb4d8; margin-top:8px;
+      padding-top:8px; border-top:1px solid rgba(0,255,136,0.2);
+    }
+
+    /* Shop Overlay */
+    #shopOverlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.9);
+      display:none; align-items:center; justify-content:center; z-index:100;
+    }
+    #shopOverlay.active { display:flex; }
+    .shop-panel {
+      background:var(--panel-bg); border:2px solid rgba(0,255,136,0.4);
+      padding:32px; max-width:950px; max-height:85vh;
+      overflow-y:auto; box-shadow:0 0 40px rgba(0,255,136,0.3);
+      clip-path: polygon(2% 0, 100% 0, 100% 98%, 98% 100%, 0 100%, 0 2%);
+    }
+    .shop-header {
+      font-size:32px; font-weight:900; margin-bottom:24px;
+      color:var(--cod-green); text-align:center; text-transform:uppercase; letter-spacing:2px;
+    }
+    .shop-tabs {
+      display:flex; gap:12px; margin-bottom:28px; justify-content:center;
+    }
+    .shop-tab {
+      padding:12px 28px; background:rgba(0,255,136,0.05);
+      border:2px solid rgba(0,255,136,0.2);
+      cursor:pointer; transition:all 0.2s; font-weight:700; text-transform:uppercase;
+      clip-path: polygon(10% 0, 100% 0, 100% 100%, 0 100%, 0 10%);
+    }
+    .shop-tab.active {
+      background:rgba(0,255,136,0.2); border-color:var(--cod-green);
+      box-shadow:0 0 15px rgba(0,255,136,0.3);
+    }
+    .shop-items {
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+      gap:18px;
+    }
+    .shop-item {
+      background:rgba(0,255,136,0.05); border:2px solid rgba(0,255,136,0.2);
+      padding:18px; cursor:pointer; transition:all 0.2s;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+    }
+    .shop-item:hover {
+      background:rgba(0,255,136,0.15); border-color:var(--cod-green);
+      transform:translateY(-3px); box-shadow:0 5px 20px rgba(0,255,136,0.3);
+    }
+    .item-name { font-weight:900; font-size:18px; margin-bottom:10px; color:#00ff88; }
+    .item-stats { display:flex; flex-direction:column; gap:8px; margin:14px 0; }
+    .stat-bar {
+      display:flex; align-items:center; gap:10px; font-size:12px;
+    }
+    .stat-bar-label { width:75px; color:#9fb4d8; font-weight:600; }
+    .stat-bar-fill {
+      flex:1; height:8px; background:rgba(255,255,255,0.1);
+      overflow:hidden; border:1px solid rgba(0,255,136,0.2);
+    }
+    .stat-bar-inner {
+      height:100%; background:linear-gradient(90deg, var(--cod-green), #00cc66);
+      box-shadow:0 0 8px rgba(0,255,136,0.5);
+    }
+    .item-price {
+      color:var(--gold); font-weight:900; font-size:20px;
+      text-align:center; margin-top:14px;
+    }
+    .shop-close { margin-top:28px; text-align:center; }
+    .btn {
+      padding:14px 36px; background:linear-gradient(135deg, #00ff88, #00cc66); color:#000;
+      border:none; font-weight:900; cursor:pointer; font-size:15px;
+      text-transform:uppercase; letter-spacing:1px;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      box-shadow:0 0 15px rgba(0,255,136,0.4);
+    }
+    .btn:hover { opacity:0.9; transform:translateY(-2px); }
+
+    /* Controls */
+    #controls {
+      position:fixed; left:20px; bottom:20px; font-size:11px;
+      color:#9fb4d8; opacity:0.7; z-index:45; max-width:340px; font-weight:600;
+    }
+
+    /* Game Over */
+    #gameOver {
+      position:fixed; inset:0; background:rgba(0,0,0,0.95);
+      display:none; align-items:center; justify-content:center; z-index:200;
+    }
+    #gameOver.active { display:flex; }
+    .gameover-panel {
+      background:var(--panel-bg); padding:45px; text-align:center;
+      border:3px solid rgba(255,68,68,0.6);
+      clip-path: polygon(3% 0, 100% 0, 100% 97%, 97% 100%, 0 100%, 0 3%);
+      box-shadow:0 0 40px rgba(255,68,68,0.5);
+    }
+    .gameover-title {
+      font-size:52px; font-weight:900; color:#ff4444; margin-bottom:24px;
+      text-transform:uppercase; letter-spacing:3px;
+    }
+    .gameover-stats { font-size:20px; margin-bottom:35px; font-weight:600; }
+
+    /* Notifications */
+    #notification {
+      position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+      background:var(--panel-bg); padding:22px 45px; font-size:20px; font-weight:700; z-index:250; display:none;
+      border:2px solid var(--cod-green); box-shadow:0 0 25px rgba(0,255,136,0.4);
+      clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
+    }
+    #notification.active { display:block; animation:notifFade 2s ease-out; }
+    @keyframes notifFade {
+      0% { opacity:0; transform:translate(-50%, -60%); }
+      10% { opacity:1; transform:translate(-50%, -50%); }
+      90% { opacity:1; transform:translate(-50%, -50%); }
+      100% { opacity:0; transform:translate(-50%, -40%); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <!-- Damage Indicator -->
+  <div id="damageIndicator"></div>
+
+  <!-- Hit Marker -->
+  <div id="hitMarker">
+    <div class="hit-cross hit-cross-h"></div>
+    <div class="hit-cross hit-cross-v"></div>
+  </div>
+
+  <!-- Loot Box Prompt -->
+  <div id="lootPrompt">📦 Press E to Open Loot Box 📦</div>
+
+  <!-- Minimap -->
+  <div id="minimap">
+    <canvas id="minimapCanvas"></canvas>
+  </div>
+
+  <!-- Top HUD -->
+  <div id="topHud">
+    <div class="top-stat">
+      <span>💰</span>
+      <span class="currency" id="currencyVal">0</span>
+    </div>
+    <div class="top-stat day-cycle">
+      Day <span class="day-number" id="dayNum">1</span>
+      <span id="timeOfDay">☀️</span>
+    </div>
+    <div class="top-stat" id="clockDisplay">
+      <span>⏰</span>
+      <span class="clock-time" id="clockTime">06:00</span>
+    </div>
+  </div>
+
+  <!-- Button Panel (COD Style) -->
+  <div id="buttonPanel">
+    <button class="panel-btn" onclick="toggleShop()">🛒 SHOP [B]</button>
+    <button class="panel-btn" onclick="toggleInventory()">📦 INVENTORY [I]</button>
+    <button class="panel-btn" onclick="toggleMinimap()">🗺️ MAP [M]</button>
+  </div>
+
+  <!-- Main HUD -->
+  <div id="hud">
+    <div class="hud-section">
+      <div class="stat-row">
+        <span class="stat-label">Health</span>
+      </div>
+      <div class="health-bar">
+        <div class="health-fill" id="healthFill" style="width:100%"></div>
+      </div>
+      <div class="stat-row">
+        <span class="stat-value" id="healthVal">100</span>
+      </div>
+    </div>
+
+    <div class="hud-section">
+      <div class="stat-row">
+        <span class="stat-label">Weapon</span>
+      </div>
+      <div id="weaponSlots">
+        <div class="weapon-slot empty" id="slot1">
+          <span class="slot-number">1</span>
+          <span class="weapon-icon">-</span>
+        </div>
+        <div class="weapon-slot empty" id="slot2">
+          <span class="slot-number">2</span>
+          <span class="weapon-icon">-</span>
+        </div>
+        <div class="weapon-slot empty" id="slot3">
+          <span class="slot-number">3</span>
+          <span class="weapon-icon">-</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-section">
+      <div class="stat-row">
+        <span class="stat-label">Ammo</span>
+      </div>
+      <div id="ammoDisplay">0 / 0</div>
+      <div id="reserveAmmo">Reserve: 0</div>
+    </div>
+
+    <div class="hud-section">
+      <div class="stat-row">
+        <span class="stat-label">Kills</span>
+        <span class="stat-value" id="killCount">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Zombies</span>
+        <span class="stat-value" id="zombieCount">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    WASD move • LMB fire • RMB aim • R reload • 1/2/3 switch<br>
+    B shop • I inventory • M minimap • E interact • F flashlight • ENTER restart
+  </div>
+
+  <!-- Wave Alert -->
+  <div id="waveAlert">⚠️ NEW WAVE INCOMING ⚠️</div>
+
+  <!-- Inventory Panel - Tarkov Style -->
+  <div id="inventoryPanel">
+    <div class="inv-header">📦  INVENTORY  📦</div>
+    <div class="inv-container">
+      <!-- Left Column: Character & Equipment -->
+      <div class="inv-left">
+        <div class="character-display">
+          <canvas id="characterCanvas"></canvas>
+        </div>
+        <div class="equipment-slots">
+          <div class="equipment-slot" id="armorSlot" data-slot="armor">
+            <div class="equipment-slot-label">ARMOR</div>
+            <div class="equipment-slot-item">🛡️</div>
+            <div class="equipment-slot-name">Empty</div>
+          </div>
+          <div class="equipment-slot" id="backpackSlot" data-slot="backpack">
+            <div class="equipment-slot-label">BACKPACK</div>
+            <div class="equipment-slot-item">🎒</div>
+            <div class="equipment-slot-name">Empty</div>
+          </div>
+          <div class="equipment-slot" id="primarySlot" data-slot="primary">
+            <div class="equipment-slot-label">PRIMARY</div>
+            <div class="equipment-slot-item">🔫</div>
+            <div class="equipment-slot-name">Empty</div>
+          </div>
+          <div class="equipment-slot" id="secondarySlot" data-slot="secondary">
+            <div class="equipment-slot-label">SECONDARY</div>
+            <div class="equipment-slot-item">🔫</div>
+            <div class="equipment-slot-name">Empty</div>
+          </div>
+          <div class="equipment-slot" id="meleeSlot" data-slot="melee">
+            <div class="equipment-slot-label">MELEE</div>
+            <div class="equipment-slot-item">🔪</div>
+            <div class="equipment-slot-name">Empty</div>
+          </div>
+          <div class="equipment-slot" id="vestSlot" data-slot="vest">
+            <div class="equipment-slot-label">VEST</div>
+            <div class="equipment-slot-item">🦺</div>
+            <div class="equipment-slot-name">Empty</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Right Column: Backpack Grid & Vest Mags -->
+      <div class="inv-right">
+        <div class="backpack-section">
+          <div class="inv-section-title">
+            <span>BACKPACK STORAGE</span>
+            <button class="drop-mode-btn" id="dropModeBtn" onclick="toggleDropMode()">DROP MODE</button>
+          </div>
+          <div class="backpack-grid-container">
+            <div class="backpack-grid" id="backpackGrid"></div>
+          </div>
+        </div>
+        
+        <div class="vest-section">
+          <div class="inv-section-title">MAGAZINE SLOTS</div>
+          <div class="mag-slots-container" id="magSlotsContainer"></div>
+        </div>
+      </div>
+    </div>
+    <div class="shop-close">
+      <button class="btn" onclick="closeInventory()">Close (I)</button>
+    </div>
+  </div>
+
+  <!-- Shop Overlay -->
+  <div id="shopOverlay">
+    <div class="shop-panel">
+      <div class="shop-header">🛒 SHOP</div>
+      
+      <div class="shop-tabs">
+        <div class="shop-tab active" onclick="switchShopTab('weapons')">Weapons</div>
+        <div class="shop-tab" onclick="switchShopTab('armor')">Armor</div>
+        <div class="shop-tab" onclick="switchShopTab('ammo')">Ammo</div>
+        <div class="shop-tab" onclick="switchShopTab('upgrades')">Upgrades</div>
+      </div>
+
+      <div id="shopContent"></div>
+
+      <div class="shop-close">
+        <button class="btn" onclick="closeShop()">Close Shop (B)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over -->
+  <div id="gameOver">
+    <div class="gameover-panel">
+      <div class="gameover-title">GAME OVER</div>
+      <div class="gameover-stats" id="gameOverStats"></div>
+      <button class="btn" onclick="restartGame()">Play Again (ENTER)</button>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div id="notification"></div>
+
+  <script>
+    // Game Constants
+    const WORLD_SIZE = 8000;
+    const BUILDING_COUNT = 24;
+    const ZOMBIE_WANDER_RADIUS = 150;
+    const ZOMBIE_DETECT_RANGE = 250;
+    const STREET_WIDTH = 120;
+    const NOISE_ATTRACT_RANGE = 400;
+    const DAY_LENGTH = 120;
+    const TILE_SIZE = 16;
+    const LOOT_BOX_INTERACT_RANGE = 50;
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width = innerWidth;
+    let H = canvas.height = innerHeight;
+
+    const minimapCanvas = document.getElementById('minimapCanvas');
+    const mmCtx = minimapCanvas.getContext('2d');
+    minimapCanvas.width = 220;
+    minimapCanvas.height = 220;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let audioInitialized = false;
+
+    // PERFORMANCE FIX: Precompute impulse buffer once for reverb
+    let sharedConvolver = null;
+    let sharedImpulseBuffer = null;
+
+    function initAudio() {
+      if (sharedImpulseBuffer) return;
+      
+      const impulseLength = audioCtx.sampleRate * 0.5;
+      sharedImpulseBuffer = audioCtx.createBuffer(2, impulseLength, audioCtx.sampleRate);
+      for (let channel = 0; channel < 2; channel++) {
+        const channelData = sharedImpulseBuffer.getChannelData(channel);
+        for (let i = 0; i < impulseLength; i++) {
+          channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / impulseLength, 2);
+        }
+      }
+      
+      sharedConvolver = audioCtx.createConvolver();
+      sharedConvolver.buffer = sharedImpulseBuffer;
+      sharedConvolver.connect(audioCtx.destination);
+    }
+
+    // Enhanced Sound Effects with Layering and Reverb
+    function playSound(type, weaponType = 'pistol', distance = 0) {
+      // AUTOPLAY FIX: Resume audio context on first interaction
+      if (!audioInitialized) {
+        audioCtx.resume();
+        initAudio();
+        audioInitialized = true;
+      }
+      
+      const maxDist = 1000;
+      const volumeMult = Math.max(0.1, 1 - (distance / maxDist));
+      
+      if (type === 'shoot') {
+        // Enhanced realistic gunshot: layered noise bursts with better "pff pff" characteristics
+        const master = audioCtx.createGain();
+        master.gain.value = 0.25 * volumeMult;
+        
+        // Multi-layer noise for more realistic gunshot texture
+        const createNoiseLayer = (duration, frequency, gain, attack, decay) => {
+          const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+          const ndata = noiseBuffer.getChannelData(0);
+          
+          // Create more realistic gunshot noise with frequency shaping
+          for (let i = 0; i < ndata.length; i++) {
+            const t = i / ndata.length;
+            const envelope = Math.pow(1 - t, decay) * Math.pow(t, attack);
+            ndata[i] = (Math.random() * 2 - 1) * envelope;
+          }
+          
+          const noise = audioCtx.createBufferSource();
+          noise.buffer = noiseBuffer;
+          
+          const filter = audioCtx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.value = frequency;
+          filter.Q.value = 0.5;
+          
+          const noiseGain = audioCtx.createGain();
+          noiseGain.gain.setValueAtTime(gain, audioCtx.currentTime);
+          noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+          
+          noise.connect(filter);
+          filter.connect(noiseGain);
+          noiseGain.connect(master);
+          
+          noise.start();
+          noise.stop(audioCtx.currentTime + duration);
+        };
+
+        // Weapon-specific sound profiles
+        if (weaponType.includes('shotgun')) {
+          // Shotgun: deeper, more spread out "BOOM"
+          createNoiseLayer(0.15, 400, 0.8, 0.1, 1.5);
+          createNoiseLayer(0.08, 800, 0.4, 0.05, 2.0);
+          createNoiseLayer(0.12, 200, 0.6, 0.2, 1.0);
+        } else if (weaponType.includes('rifle') || weaponType === 'm4a1' || weaponType === 'm249') {
+          // Rifle: sharp "CRACK" with high frequency content
+          createNoiseLayer(0.08, 1200, 0.7, 0.02, 2.5);
+          createNoiseLayer(0.06, 2000, 0.5, 0.01, 3.0);
+          createNoiseLayer(0.10, 600, 0.4, 0.05, 1.8);
+        } else if (weaponType === 'sniper') {
+          // Sniper: very sharp, focused "CRACK"
+          createNoiseLayer(0.06, 1500, 0.8, 0.01, 3.5);
+          createNoiseLayer(0.04, 2500, 0.6, 0.005, 4.0);
+          createNoiseLayer(0.08, 800, 0.3, 0.03, 2.0);
+        } else {
+          // Pistol: shorter, sharper "POP"
+          createNoiseLayer(0.06, 1000, 0.6, 0.03, 2.2);
+          createNoiseLayer(0.04, 1600, 0.4, 0.02, 2.8);
+          createNoiseLayer(0.08, 500, 0.3, 0.05, 1.5);
+        }
+
+        // Add subtle low-frequency thump for impact
+        const thump = audioCtx.createOscillator();
+        const thumpGain = audioCtx.createGain();
+        const thumpFilter = audioCtx.createBiquadFilter();
+        
+        thump.type = 'sine';
+        thump.frequency.value = weaponType.includes('shotgun') ? 60 : 80;
+        thumpFilter.type = 'lowpass';
+        thumpFilter.frequency.value = 200;
+        thumpGain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        thumpGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        
+        thump.connect(thumpFilter);
+        thumpFilter.connect(thumpGain);
+        thumpGain.connect(master);
+        
+        thump.start();
+        thump.stop(audioCtx.currentTime + 0.1);
+
+        // Final routing with reverb
+        if (sharedConvolver) master.connect(sharedConvolver);
+        master.connect(audioCtx.destination);
+
+      } else if (type === 'hit') {
+        // Hit sound with more impact
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = 120;
+        filter.type = 'lowpass';
+        filter.frequency.value = 400;
+        gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.12);
+        
+        // Add impact thud
+        setTimeout(() => {
+          const thud = audioCtx.createOscillator();
+          const thudGain = audioCtx.createGain();
+          thud.connect(thudGain);
+          thudGain.connect(audioCtx.destination);
+          thud.type = 'sine';
+          thud.frequency.value = 80;
+          thudGain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          thudGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+          thud.start();
+          thud.stop(audioCtx.currentTime + 0.08);
+        }, 10);
+      } else if (type === 'reload') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'triangle';
+        osc.frequency.value = 350;
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+        
+        setTimeout(() => {
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          osc2.type = 'sine';
+          osc2.frequency.value = 250;
+          gain2.gain.setValueAtTime(0.08, audioCtx.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+          osc2.start();
+          osc2.stop(audioCtx.currentTime + 0.12);
+        }, 100);
+      } else if (type === 'wave') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      } else if (type === 'loot') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+      }
+    }
+
+    // Player object
+    const player = {
+      x: WORLD_SIZE / 2, y: WORLD_SIZE / 2, radius: 14, speed: 200,
+      angle: 0, health: 100, maxHealth: 100, armor: null
+    };
+
+    const camera = { x: player.x, y: player.y };
+
+    // Weapons database
+    const WEAPONS = {
+      pistol: {
+        id: 'pistol', name: 'Pistol', icon: '🔫', slot: 2,
+        magSize: 15, mag: 15, reserve: 45, reloadTime: 1000,
+        cone: 28, aimCone: 10, range: 200, aimRange: 320,
+        damage: 22, cooldown: 240, automatic: false,
+        price: 0, type: 'secondary', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 18, weaponType: 'pistol', rarity: 'common'
+      },
+      deagle: {
+        id: 'deagle', name: 'Desert Eagle', icon: '🔫', slot: 2,
+        magSize: 7, mag: 7, reserve: 21, reloadTime: 1200,
+        cone: 35, aimCone: 18, range: 280, aimRange: 420,
+        damage: 65, cooldown: 400, automatic: false,
+        price: 800, type: 'secondary', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 22, weaponType: 'pistol', rarity: 'rare'
+      },
+      dblbarrel: {
+        id: 'dblbarrel', name: 'Double Barrel', icon: '🔫', slot: 2,
+        magSize: 2, mag: 2, reserve: 20, reloadTime: 1800,
+        cone: 80, aimCone: 60, range: 150, aimRange: 200,
+        damage: 45, cooldown: 800, automatic: false,
+        price: 1200, type: 'secondary', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 20, weaponType: 'shotgun', rarity: 'uncommon'
+      },
+      m4a1: {
+        id: 'm4a1', name: 'M4A1', icon: '🔫', slot: 1,
+        magSize: 30, mag: 30, reserve: 120, reloadTime: 1500,
+        cone: 35, aimCone: 18, range: 350, aimRange: 500,
+        damage: 38, cooldown: 90, automatic: true,
+        price: 2500, type: 'primary', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 28, weaponType: 'rifle', rarity: 'rare'
+      },
+      spas: {
+        id: 'spas', name: 'SPAS-12', icon: '🔫', slot: 1,
+        magSize: 8, mag: 8, reserve: 32, reloadTime: 2000,
+        cone: 75, aimCone: 55, range: 180, aimRange: 240,
+        damage: 55, cooldown: 600, automatic: false,
+        price: 3000, type: 'primary', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 26, weaponType: 'shotgun', rarity: 'epic'
+      },
+      sniper: {
+        id: 'sniper', name: 'Bolt Rifle', icon: '🔫', slot: 1,
+        magSize: 5, mag: 5, reserve: 20, reloadTime: 2000,
+        cone: 12, aimCone: 5, range: 500, aimRange: 800,
+        damage: 120, cooldown: 1200, automatic: false,
+        price: 4500, type: 'primary', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 35, weaponType: 'sniper', rarity: 'epic'
+      },
+      m249: {
+        id: 'm249', name: 'M249 SAW', icon: '🔫', slot: 1,
+        magSize: 100, mag: 100, reserve: 200, reloadTime: 3500,
+        cone: 45, aimCone: 28, range: 380, aimRange: 520,
+        damage: 32, cooldown: 80, automatic: true,
+        price: 6000, type: 'primary', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 30, weaponType: 'rifle', rarity: 'legendary'
+      },
+      knife: {
+        id: 'knife', name: 'Knife', icon: '🔪', slot: 3,
+        magSize: 999, mag: 999, reserve: 0, reloadTime: 0,
+        cone: 45, aimCone: 45, range: 40, aimRange: 40,
+        damage: 50, cooldown: 400, automatic: false,
+        price: 0, type: 'melee', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 0, weaponType: 'melee', rarity: 'common'
+      },
+      crowbar: {
+        id: 'crowbar', name: 'Crowbar', icon: '🔨', slot: 3,
+        magSize: 999, mag: 999, reserve: 0, reloadTime: 0,
+        cone: 50, aimCone: 50, range: 50, aimRange: 50,
+        damage: 75, cooldown: 600, automatic: false,
+        price: 500, type: 'melee', lastShot: 0, reloading: false, reloadStart: 0,
+        upgrades: { damage: 0, range: 0, fireRate: 0 },
+        barrelLength: 0, weaponType: 'melee', rarity: 'uncommon'
+      }
+    };
+
+    const ARMOR = {
+      riot: {
+        id: 'riot', name: 'Riot Gear', protection: 30, mobility: -10,
+        durability: 100, maxDurability: 100, price: 1500
+      },
+      military: {
+        id: 'military', name: 'Military Vest', protection: 50, mobility: -5,
+        durability: 150, maxDurability: 150, price: 3000
+      },
+      tactical: {
+        id: 'tactical', name: 'Tactical Armor', protection: 70, mobility: -15,
+        durability: 200, maxDurability: 200, price: 5000
+      }
+    };
+
+    const UPGRADES = {
+      damage1: { name: 'Damage +10%', stat: 'damage', value: 10, price: 500 },
+      damage2: { name: 'Damage +20%', stat: 'damage', value: 20, price: 1000 },
+      range1: { name: 'Range +15%', stat: 'range', value: 15, price: 600 },
+      range2: { name: 'Range +30%', stat: 'range', value: 30, price: 1200 },
+      fireRate1: { name: 'Fire Rate +15%', stat: 'fireRate', value: 15, price: 700 },
+      fireRate2: { name: 'Fire Rate +30%', stat: 'fireRate', value: 30, price: 1400 }
+    };
+
+
+    // TARKOV-STYLE INVENTORY DATA STRUCTURES
+    
+    // Backpack types with grid dimensions (cols x rows)
+    const BACKPACKS = {
+      starter: {
+        id: 'starter', name: 'Starter Backpack', icon: '🎒',
+        cols: 6, rows: 4, price: 0, rarity: 'common',
+        description: 'Basic backpack with limited space'
+      },
+      military: {
+        id: 'military', name: 'Military Backpack', icon: '🎒',
+        cols: 8, rows: 5, price: 1500, rarity: 'uncommon',
+        description: 'Tactical backpack with more storage'
+      },
+      tactical: {
+        id: 'tactical', name: 'Tactical Rig', icon: '🎒',
+        cols: 10, rows: 6, price: 3500, rarity: 'rare',
+        description: 'High-capacity tactical backpack'
+      },
+      raid: {
+        id: 'raid', name: 'Raid Backpack', icon: '🎒',
+        cols: 12, rows: 7, price: 6000, rarity: 'epic',
+        description: 'Massive raid-ready storage system'
+      }
+    };
+
+    // Vest types with magazine slot counts
+    const VESTS = {
+      starter: {
+        id: 'starter', name: 'Starter Vest', icon: '🦺',
+        magSlots: 4, price: 0, rarity: 'common',
+        description: 'Basic tactical vest with 4 magazine slots'
+      },
+      tactical: {
+        id: 'tactical', name: 'Tactical Vest', icon: '🦺',
+        magSlots: 6, price: 1200, rarity: 'uncommon',
+        description: 'Improved vest with 6 magazine slots'
+      },
+      assault: {
+        id: 'assault', name: 'Assault Vest', icon: '🦺',
+        magSlots: 8, price: 2800, rarity: 'rare',
+        description: 'Combat vest with 8 magazine slots'
+      },
+      operator: {
+        id: 'operator', name: 'Operator Vest', icon: '🦺',
+        magSlots: 10, price: 5000, rarity: 'epic',
+        description: 'Elite operator vest with 10 magazine slots'
+      }
+    };
+
+    // Magazine types (2x1 or 2x2 grid size)
+    const MAGAZINE_TYPES = {
+      pistol: {
+        id: 'pistol', name: 'Pistol Magazine', icon: '📋',
+        capacity: 15, ammoType: 'pistol', gridWidth: 1, gridHeight: 2,
+        rarity: 'common', description: 'Standard pistol magazine'
+      },
+      rifle: {
+        id: 'rifle', name: 'Rifle Magazine', icon: '📋',
+        capacity: 30, ammoType: 'rifle', gridWidth: 1, gridHeight: 2,
+        rarity: 'common', description: 'Standard rifle magazine'
+      },
+      sniper: {
+        id: 'sniper', name: 'Sniper Magazine', icon: '📋',
+        capacity: 5, ammoType: 'sniper', gridWidth: 1, gridHeight: 2,
+        rarity: 'uncommon', description: 'Bolt-action rifle magazine'
+      },
+      box: {
+        id: 'box', name: 'Box Magazine', icon: '📋',
+        capacity: 100, ammoType: 'rifle', gridWidth: 2, gridHeight: 2,
+        rarity: 'rare', description: 'High-capacity box magazine'
+      }
+    };
+
+    // Ammo box types with grid sizes
+    const AMMO_BOXES = {
+      pistol: {
+        id: 'pistol', name: 'Pistol Ammo Box', icon: '📦',
+        ammoType: 'pistol', amount: 30, gridWidth: 1, gridHeight: 1,
+        rarity: 'common', description: '30 rounds of pistol ammunition'
+      },
+      rifle: {
+        id: 'rifle', name: 'Rifle Ammo Box', icon: '📦',
+        ammoType: 'rifle', amount: 60, gridWidth: 1, gridHeight: 2,
+        rarity: 'common', description: '60 rounds of rifle ammunition'
+      },
+      shotgun: {
+        id: 'shotgun', name: 'Shotgun Ammo Box', icon: '📦',
+        ammoType: 'shotgun', amount: 20, gridWidth: 1, gridHeight: 2,
+        rarity: 'uncommon', description: '20 shotgun shells'
+      },
+      sniper: {
+        id: 'sniper', name: 'Sniper Ammo Box', icon: '📦',
+        ammoType: 'sniper', amount: 10, gridWidth: 1, gridHeight: 2,
+        rarity: 'rare', description: '10 rounds of sniper ammunition'
+      }
+    };
+
+    // Add grid sizes to weapons
+    const WEAPON_GRID_SIZES = {
+      pistol: { width: 2, height: 2 },
+      deagle: { width: 2, height: 2 },
+      dblbarrel: { width: 3, height: 2 },
+      m4a1: { width: 4, height: 2 },
+      spas: { width: 4, height: 2 },
+      sniper: { width: 5, height: 2 },
+      m249: { width: 5, height: 3 },
+      knife: { width: 1, height: 2 },
+      crowbar: { width: 1, height: 3 }
+    };
+
+    // Apply grid sizes to weapons
+    Object.keys(WEAPONS).forEach(key => {
+      if (WEAPON_GRID_SIZES[key]) {
+        WEAPONS[key].gridWidth = WEAPON_GRID_SIZES[key].width;
+        WEAPONS[key].gridHeight = WEAPON_GRID_SIZES[key].height;
+      }
+    });
+
+    // Enhanced Tarkov-Style Inventory System
+    const inventory = {
+      // Equipment slots
+      primaryWeapon: null,
+      secondaryWeapon: null,
+      meleeWeapon: null,
+      backpack: null,
+      vest: null,
+      // Grid-based backpack storage
+      backpackGrid: [],
+      gridItems: [],
+      // Magazine slots in vest
+      magazineSlots: [],
+      slot1: null,
+      slot2: WEAPONS.pistol,
+      slot3: WEAPONS.knife,
+      currentSlot: 2,
+      armor: null,
+      storedWeapons: [],  // Storage for weapons not equipped
+      storedAmmo: {       // Separate ammo storage
+        pistol: 90,
+        rifle: 180,
+        shotgun: 60,
+        sniper: 40
+      }
+    };
+
+
+    // TARKOV INVENTORY - GRID UTILITY FUNCTIONS
+    
+    // Initialize backpack grid based on equipped backpack
+    function initializeBackpackGrid() {
+      const backpack = inventory.backpack || BACKPACKS.starter;
+      inventory.backpackGrid = [];
+      for (let row = 0; row < backpack.rows; row++) {
+        inventory.backpackGrid[row] = [];
+        for (let col = 0; col < backpack.cols; col++) {
+          inventory.backpackGrid[row][col] = null;
+        }
+      }
+    }
+    
+    // Initialize magazine slots based on equipped vest
+    function initializeMagazineSlots() {
+      const vest = inventory.vest || VESTS.starter;
+      inventory.magazineSlots = [];
+      for (let i = 0; i < vest.magSlots; i++) {
+        inventory.magazineSlots.push(null);
+      }
+    }
+    
+    // Check if item can fit at grid position
+    function canPlaceItemAt(item, gridRow, gridCol) {
+      const backpack = inventory.backpack || BACKPACKS.starter;
+      const itemWidth = item.gridWidth || 1;
+      const itemHeight = item.gridHeight || 1;
+      if (gridRow + itemHeight > backpack.rows || gridCol + itemWidth > backpack.cols) {
+        return false;
+      }
+      for (let r = gridRow; r < gridRow + itemHeight; r++) {
+        for (let c = gridCol; c < gridCol + itemWidth; c++) {
+          if (inventory.backpackGrid[r][c] !== null) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    
+    // Place item in grid
+    function placeItemInGrid(item, gridRow, gridCol) {
+      if (!canPlaceItemAt(item, gridRow, gridCol)) return false;
+      const itemWidth = item.gridWidth || 1;
+      const itemHeight = item.gridHeight || 1;
+      const itemId = 'item_' + Date.now() + '_' + Math.random();
+      for (let r = gridRow; r < gridRow + itemHeight; r++) {
+        for (let c = gridCol; c < gridCol + itemWidth; c++) {
+          inventory.backpackGrid[r][c] = itemId;
+        }
+      }
+      inventory.gridItems.push({
+        id: itemId,
+        item: item,
+        row: gridRow,
+        col: gridCol
+      });
+      return true;
+    }
+    
+    // Remove item from grid
+    function removeItemFromGrid(itemId) {
+      const itemIndex = inventory.gridItems.findIndex(i => i.id === itemId);
+      if (itemIndex === -1) return false;
+      const gridItem = inventory.gridItems[itemIndex];
+      const itemWidth = gridItem.item.gridWidth || 1;
+      const itemHeight = gridItem.item.gridHeight || 1;
+      for (let r = gridItem.row; r < gridItem.row + itemHeight; r++) {
+        for (let c = gridItem.col; c < gridItem.col + itemWidth; c++) {
+          inventory.backpackGrid[r][c] = null;
+        }
+      }
+      inventory.gridItems.splice(itemIndex, 1);
+      return true;
+    }
+    
+    // Find empty position for item in grid
+    function findEmptyPositionForItem(item) {
+      const backpack = inventory.backpack || BACKPACKS.starter;
+      const itemWidth = item.gridWidth || 1;
+      const itemHeight = item.gridHeight || 1;
+      for (let row = 0; row <= backpack.rows - itemHeight; row++) {
+        for (let col = 0; col <= backpack.cols - itemWidth; col++) {
+          if (canPlaceItemAt(item, row, col)) {
+            return { row, col };
+          }
+        }
+      }
+      return null;
+    }
+    
+    // Convert pixel position to grid coordinates
+    function pixelToGrid(x, y, cellSize = 48) {
+      const col = Math.floor(x / (cellSize + 2));
+      const row = Math.floor(y / (cellSize + 2));
+      return { row, col };
+    }
+    
+    // Convert grid coordinates to pixel position
+    function gridToPixel(row, col, cellSize = 48) {
+      const x = col * (cellSize + 2);
+      const y = row * (cellSize + 2);
+      return { x, y };
+    }
+    
+    // Get item at grid position
+    function getItemAtPosition(row, col) {
+      if (row < 0 || col < 0) return null;
+      const backpack = inventory.backpack || BACKPACKS.starter;
+      if (row >= backpack.rows || col >= backpack.cols) return null;
+      const itemId = inventory.backpackGrid[row][col];
+      if (!itemId) return null;
+      return inventory.gridItems.find(i => i.id === itemId);
+    }
+    
+    // Magazine slot functions
+    function addMagazineToVest(magazine, slotIndex) {
+      if (slotIndex < 0 || slotIndex >= inventory.magazineSlots.length) return false;
+      if (inventory.magazineSlots[slotIndex] !== null) return false;
+      inventory.magazineSlots[slotIndex] = magazine;
+      return true;
+    }
+    
+    function removeMagazineFromVest(slotIndex) {
+      if (slotIndex < 0 || slotIndex >= inventory.magazineSlots.length) return null;
+      const magazine = inventory.magazineSlots[slotIndex];
+      inventory.magazineSlots[slotIndex] = null;
+      return magazine;
+    }
+    
+    function findEmptyMagazineSlot() {
+      for (let i = 0; i < inventory.magazineSlots.length; i++) {
+        if (inventory.magazineSlots[i] === null) return i;
+      }
+      return -1;
+    }
+
+    let currentWeapon = inventory.slot2;
+
+    let keys = {};
+    let mouse = { x: W/2, y: H/2, leftDown: false, rightDown: false };
+    let zombies = [];
+    let buildings = [];
+    let lootBoxes = [];  // New: Loot boxes in buildings
+    let trails = [];
+    let muzzleFlashes = [];
+    let bloodSplatters = [];
+    let decorations = [];
+    let hitMarkers = [];  // New: Hit markers for feedback
+    let particles = [];   // New: Enhanced particle system
+    let currency = 0;
+    let kills = 0;
+    let day = 1;
+    let gameTime = 0;
+    let dayTime = 0;
+    let lastTime = performance.now();
+    let gameOver = false;
+    let shopOpen = false;
+    let inventoryOpen = false;
+    let currentShopTab = 'weapons';
+    let minimapExpanded = false;
+    let nearestLootBox = null;
+    let flashlightOn = false;
+
+    const exploredMap = new Set();
+
+    const terrainTiles = [];
+    function generateTerrain() {
+      const blockSize = 800;
+      const streetWidth = STREET_WIDTH;
+      const blocksPerSide = Math.floor(WORLD_SIZE / (blockSize + streetWidth));
+      
+      for (let x = 0; x < WORLD_SIZE; x += 100) {
+        for (let y = 0; y < WORLD_SIZE; y += 100) {
+          let type = 'grass';
+          
+          for (let bx = 0; bx < blocksPerSide; bx++) {
+            const streetX = bx * (blockSize + streetWidth);
+            if (x >= streetX && x < streetX + streetWidth) {
+              type = 'street';
+              break;
+            }
+          }
+          
+          if (type === 'grass') {
+            for (let by = 0; by < blocksPerSide; by++) {
+              const streetY = by * (blockSize + streetWidth);
+              if (y >= streetY && y < streetY + streetWidth) {
+                type = 'street';
+                break;
+              }
+            }
+          }
+          
+          if (type === 'grass' && Math.random() > 0.85) {
+            type = 'path';
+          }
+          
+          terrainTiles.push({ x, y, w: 100, h: 100, type, shade: Math.random() });
+        }
+      }
+    }
+
+    function generateBuildings() {
+      buildings = [];
+      lootBoxes = [];
+      const blockSize = 800;
+      const streetWidth = STREET_WIDTH;
+      const blocksPerSide = Math.floor(WORLD_SIZE / (blockSize + streetWidth));
+      
+      for (let bx = 0; bx < blocksPerSide; bx++) {
+        for (let by = 0; by < blocksPerSide; by++) {
+          const blockX = bx * (blockSize + streetWidth) + streetWidth;
+          const blockY = by * (blockSize + streetWidth) + streetWidth;
+          
+          const housesInBlock = 2 + Math.floor(Math.random() * 3);
+          for (let h = 0; h < housesInBlock; h++) {
+            const w = 180 + Math.random() * 140;
+            const hh = 180 + Math.random() * 140;
+            const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+            const y = blockY + Math.random() * (blockSize - hh - 60) + 30;
+            
+            let overlap = false;
+            for (const other of buildings) {
+              if (x < other.x + other.w + 40 && x + w + 40 > other.x &&
+                  y < other.y + other.h + 40 && y + hh + 40 > other.y) {
+                overlap = true;
+                break;
+              }
+            }
+            if (overlap) continue;
+            
+            // Dynamic door placement: face nearest street edge
+            const leftStreetX = bx * (blockSize + streetWidth);
+            const rightStreetX = blockX + blockSize;
+            const topStreetY = by * (blockSize + streetWidth);
+            const bottomStreetY = blockY + blockSize;
+            const distLeft = Math.abs(x - leftStreetX);
+            const distRight = Math.abs((x + w) - rightStreetX);
+            const distTop = Math.abs(y - topStreetY);
+            const distBottom = Math.abs((y + hh) - bottomStreetY);
+            const min = Math.min(distLeft, distRight, distTop, distBottom);
+            let doorX, doorY, doorW, doorH, doorSide;
+            const doorSize = 40;
+            if (min === distTop) {
+              doorSide = 'north'; doorW = doorSize; doorH = 5;
+              doorX = x + (w/2) - doorW/2; doorY = y - doorH;
+            } else if (min === distBottom) {
+              doorSide = 'south'; doorW = doorSize; doorH = 5;
+              doorX = x + (w/2) - doorW/2; doorY = y + hh;
+            } else if (min === distLeft) {
+              doorSide = 'west'; doorW = 5; doorH = doorSize;
+              doorX = x - doorW; doorY = y + (hh/2) - doorH/2;
+            } else {
+              doorSide = 'east'; doorW = 5; doorH = doorSize;
+              doorX = x + w; doorY = y + (hh/2) - doorH/2;
+            }
+            
+            const building = {
+              x, y, w, h: hh, explored: false,
+              doorX, doorY, doorW, doorH, doorSide,
+              zombiesInside: [],
+              color: `rgb(${80 + Math.random() * 60}, ${70 + Math.random() * 50}, ${60 + Math.random() * 40})`
+            };
+
+            // Spawn zombies distributed throughout the building, avoiding door area
+            const zombieCount = 2 + Math.floor(Math.random() * 4);
+            const doorMargin = 60; // Keep zombies away from door area
+            for (let j = 0; j < zombieCount; j++) {
+              let spawnX, spawnY;
+              let attempts = 0;
+              do {
+                // Try to spawn away from door area
+                if (doorSide === 'north') {
+                  spawnX = x + 20 + Math.random() * (w - 40);
+                  spawnY = y + doorMargin + Math.random() * (hh - doorMargin - 40);
+                } else if (doorSide === 'south') {
+                  spawnX = x + 20 + Math.random() * (w - 40);
+                  spawnY = y + 20 + Math.random() * (hh - doorMargin - 40);
+                } else if (doorSide === 'west') {
+                  spawnX = x + doorMargin + Math.random() * (w - doorMargin - 40);
+                  spawnY = y + 20 + Math.random() * (hh - 40);
+                } else { // east
+                  spawnX = x + 20 + Math.random() * (w - doorMargin - 40);
+                  spawnY = y + 20 + Math.random() * (hh - 40);
+                }
+                attempts++;
+              } while (attempts < 10); // Fallback to any position if needed
+              
+              building.zombiesInside.push({
+                x: spawnX,
+                y: spawnY,
+                radius: 10, health: 50, maxHealth: 50, speed: 35,
+                wanderAngle: Math.random() * Math.PI * 2,
+                wanderTimer: Math.random() * 2, // Stagger their initial movement
+                state: 'wander', building: building,
+                animOffset: Math.random() * Math.PI * 2
+              });
+            }
+
+            // Add 1-3 loot boxes per building
+            const lootBoxCount = 1 + Math.floor(Math.random() * 3);
+            for (let lb = 0; lb < lootBoxCount; lb++) {
+              lootBoxes.push({
+                x: x + 30 + Math.random() * (w - 60),
+                y: y + 30 + Math.random() * (hh - 60),
+                size: 20,
+                opened: false,
+                building: building,
+                pulsePhase: Math.random() * Math.PI * 2
+              });
+            }
+
+            buildings.push(building);
+          }
+        }
+      }
+    }
+
+    function checkBuildingCollision(x, y, radius) {
+      for (const b of buildings) {
+        const inDoorX = x + radius > b.doorX && x - radius < b.doorX + b.doorW;
+        const inDoorY = y + radius > b.doorY && y - radius < b.doorY + b.doorH;
+        
+        if (inDoorX && inDoorY) {
+          return null;
+        }
+        
+        const insideX = x > b.x && x < b.x + b.w;
+        const insideY = y > b.y && y < b.y + b.h;
+        
+        if (insideX && insideY) {
+          return null;
+        }
+        
+        if (x + radius > b.x && x - radius < b.x + b.w &&
+            y + radius > b.y && y - radius < b.y + b.h) {
+          return b;
+        }
+      }
+      return null;
+    }
+
+    // NEW: Spawn initial zombies on streets for immediate action
+    function spawnInitialZombies() {
+      const initialCount = 15 + day * 5;
+      
+      for (let i = 0; i < initialCount; i++) {
+        // Spawn on streets (random street positions)
+        const blockSize = 800;
+        const streetWidth = STREET_WIDTH;
+        const blocksPerSide = Math.floor(WORLD_SIZE / (blockSize + streetWidth));
+        
+        // Pick random street segment
+        const isHorizontalStreet = Math.random() > 0.5;
+        if (isHorizontalStreet) {
+          const streetIdx = Math.floor(Math.random() * blocksPerSide);
+          const streetY = streetIdx * (blockSize + streetWidth);
+          zombies.push({
+            x: Math.random() * WORLD_SIZE,
+            y: streetY + Math.random() * streetWidth,
+            radius: 10 + Math.random() * 5,
+            health: 40 + day * 10,
+            maxHealth: 40 + day * 10,
+            speed: 30 + day * 3,
+            wanderAngle: Math.random() * Math.PI * 2,
+            wanderTimer: 0,
+            state: 'wander',
+            // Bias targets toward center so edge spawns drift inward
+            targetX: WORLD_SIZE/2 + (Math.random()-0.5)*WORLD_SIZE*0.25,
+            targetY: WORLD_SIZE/2 + (Math.random()-0.5)*WORLD_SIZE*0.25,
+            animOffset: Math.random() * Math.PI * 2,
+            // Mark as outdoor zombie
+            isOutdoor: true
+          });
+        } else {
+          const streetIdx = Math.floor(Math.random() * blocksPerSide);
+          const streetX = streetIdx * (blockSize + streetWidth);
+          zombies.push({
+            x: streetX + Math.random() * streetWidth,
+            y: Math.random() * WORLD_SIZE,
+            radius: 10 + Math.random() * 5,
+            health: 40 + day * 10,
+            maxHealth: 40 + day * 10,
+            speed: 30 + day * 3,
+            wanderAngle: Math.random() * Math.PI * 2,
+            wanderTimer: 0,
+            state: 'wander',
+            targetX: WORLD_SIZE/2 + (Math.random()-0.5)*WORLD_SIZE*0.25,
+            targetY: WORLD_SIZE/2 + (Math.random()-0.5)*WORLD_SIZE*0.25,
+            animOffset: Math.random() * Math.PI * 2,
+            // Mark as outdoor zombie
+            isOutdoor: true
+          });
+        }
+      }
+    }
+
+    // Apocalypse decorations
+    function generateDecorations() {
+      decorations = [];
+      for (let i = 0; i < 220; i++) {
+        const x = Math.random() * WORLD_SIZE;
+        const y = Math.random() * WORLD_SIZE;
+        const r = Math.random();
+        const type = r < 0.35 ? 'car' : r < 0.7 ? 'trash' : 'debris';
+        const size = type === 'car' ? 40 + Math.random()*40 : 12 + Math.random()*24;
+        decorations.push({ x, y, type, size, rot: Math.random()*Math.PI*2 });
+      }
+    }
+
+    function spawnZombieWave() {
+      const waveSize = 10 + (day - 1) * 15;
+      playSound('wave');
+      showWaveAlert();
+      
+      for (let i = 0; i < waveSize; i++) {
+        const side = Math.floor(Math.random() * 4);
+        let x, y;
+        const margin = 200;
+        
+        if (side === 0) { x = Math.random() * WORLD_SIZE; y = -margin; }
+        else if (side === 1) { x = WORLD_SIZE + margin; y = Math.random() * WORLD_SIZE; }
+        else if (side === 2) { x = Math.random() * WORLD_SIZE; y = WORLD_SIZE + margin; }
+        else { x = -margin; y = Math.random() * WORLD_SIZE; }
+
+        // Ensure spawn position is within world bounds
+        x = Math.max(50, Math.min(WORLD_SIZE - 50, x));
+        y = Math.max(50, Math.min(WORLD_SIZE - 50, y));
+        
+        zombies.push({
+          x, y, radius: 10 + Math.random() * 5,
+          health: 40 + day * 10, maxHealth: 40 + day * 10,
+          speed: 30 + day * 3, wanderAngle: Math.random() * Math.PI * 2,
+          wanderTimer: 0, state: 'wander',
+          // bias their wandering target toward the middle of the map
+          targetX: WORLD_SIZE/2 + (Math.random()-0.5) * WORLD_SIZE * 0.25,
+          targetY: WORLD_SIZE/2 + (Math.random()-0.5) * WORLD_SIZE * 0.25,
+          animOffset: Math.random() * Math.PI * 2,
+          // Mark as outdoor zombie (no building property)
+          isOutdoor: true
+        });
+      }
+    }
+
+    function showWaveAlert() {
+      const alert = document.getElementById('waveAlert');
+      alert.classList.add('active');
+      setTimeout(() => alert.classList.remove('active'), 2000);
+    }
+
+    function updateZombieAI(z, dt) {
+      // Indoor zombies are completely frozen until building is revealed
+      // Only outdoor zombies (no building property) get AI updates
+      if (z.building && !z.building.explored) {
+        return; // Completely frozen - no movement, no AI
+      }
+
+      // Keep zombies within world bounds
+      z.x = Math.max(z.radius, Math.min(WORLD_SIZE - z.radius, z.x));
+      z.y = Math.max(z.radius, Math.min(WORLD_SIZE - z.radius, z.y));
+
+      const dist = Math.hypot(z.x - player.x, z.y - player.y);
+
+      if (dist < ZOMBIE_DETECT_RANGE) {
+        z.state = 'chase';
+        z.targetX = player.x;
+        z.targetY = player.y;
+      }
+
+      if (z.state === 'chase') {
+        const dx = z.targetX - z.x;
+        const dy = z.targetY - z.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 5) {
+          const collision = checkBuildingCollision(z.x + (dx/dist) * z.speed * dt, z.y + (dy/dist) * z.speed * dt, z.radius);
+          if (!collision) {
+            // Exterior aggression: zombies farther than 1200 units from center get a speed boost toward player
+            const centerDist = Math.hypot(z.x - WORLD_SIZE/2, z.y - WORLD_SIZE/2);
+            const aggression = centerDist > 1200 ? 1.35 : 1;
+            z.x += (dx / dist) * z.speed * dt * aggression;
+            z.y += (dy / dist) * z.speed * dt * aggression;
+          } else {
+            z.wanderAngle += (Math.random() - 0.5) * 2;
+            // When colliding, still drift toward the player (less wandering) to bias inward movement
+            z.x += Math.cos(z.wanderAngle) * z.speed * dt * 0.35;
+            z.y += Math.sin(z.wanderAngle) * z.speed * dt * 0.35;
+          }
+        }
+
+        // ENHANCED BUGFIX: Attack with cooldown, range check, and alive check
+        const attackRange = z.radius + player.radius;
+        const now = performance.now();
+        if (!z.lastAttack) z.lastAttack = 0;
+        
+        if (z.health > 0 && dist < attackRange && now - z.lastAttack >= 500) {
+          damagePlayer(12); // Damage per attack (not per frame)
+          z.lastAttack = now;
+        }
+      } else if (z.state === 'wander') {
+        z.wanderTimer -= dt;
+        if (z.wanderTimer <= 0) {
+          z.wanderAngle = Math.random() * Math.PI * 2;
+          z.wanderTimer = 2 + Math.random() * 3;
+        }
+        
+        const newX = z.x + Math.cos(z.wanderAngle) * z.speed * dt * 0.3;
+        const newY = z.y + Math.sin(z.wanderAngle) * z.speed * dt * 0.3;
+        
+        if (!checkBuildingCollision(newX, newY, z.radius)) {
+          z.x = newX;
+          z.y = newY;
+        } else {
+          z.wanderAngle += Math.PI;
+        }
+      }
+
+      z.x = Math.max(z.radius, Math.min(WORLD_SIZE - z.radius, z.x));
+      z.y = Math.max(z.radius, Math.min(WORLD_SIZE - z.radius, z.y));
+    }
+
+    function damagePlayer(amount) {
+      // Show damage indicator
+      const dmgIndicator = document.getElementById('damageIndicator');
+      dmgIndicator.classList.remove('active');
+      void dmgIndicator.offsetWidth; // Trigger reflow
+      dmgIndicator.classList.add('active');
+      setTimeout(() => dmgIndicator.classList.remove('active'), 300);
+
+      if (player.armor && player.armor.durability > 0) {
+        const absorbed = amount * (player.armor.protection / 100);
+        player.armor.durability -= absorbed;
+        amount -= absorbed;
+        if (player.armor.durability <= 0) {
+          player.armor = null;
+          showNotification('⚠️ Armor Destroyed');
+        }
+      }
+      player.health -= amount;
+      if (player.health <= 0) {
+        player.health = 0;
+        triggerGameOver();
+      }
+    }
+
+    // NEW: Enhanced hit marker system
+    function showHitMarker() {
+      const hitMarker = document.getElementById('hitMarker');
+      hitMarker.classList.remove('active');
+      void hitMarker.offsetWidth;
+      hitMarker.classList.add('active');
+      setTimeout(() => hitMarker.classList.remove('active'), 200);
+    }
+
+    function tryShoot() {
+      if (!currentWeapon || currentWeapon.reloading) return;
+      const now = performance.now();
+      if (now - currentWeapon.lastShot < currentWeapon.cooldown) return;
+      
+      if (currentWeapon.mag <= 0) {
+        startReload(currentWeapon);
+        return;
+      }
+
+      currentWeapon.lastShot = now;
+      currentWeapon.mag--;
+      
+      playSound('shoot', currentWeapon.id);
+      
+      const barrelX = player.x + Math.cos(player.angle) * (player.radius + currentWeapon.barrelLength);
+      const barrelY = player.y + Math.sin(player.angle) * (player.radius + currentWeapon.barrelLength);
+      
+      // ENHANCED: Improved muzzle flash with particles
+      const flashSize = currentWeapon.weaponType === 'shotgun' ? 20 : currentWeapon.weaponType === 'rifle' ? 15 : 10;
+      muzzleFlashes.push({
+        x: barrelX,
+        y: barrelY,
+        angle: player.angle,
+        life: 0.12,
+        size: flashSize,
+        weaponType: currentWeapon.weaponType
+      });
+
+      // Add muzzle flash particles
+      for (let i = 0; i < 12; i++) {
+        const angle = player.angle + (Math.random() - 0.5) * 0.8;
+        const speed = 150 + Math.random() * 200;
+        particles.push({
+          x: barrelX,
+          y: barrelY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 0.2 + Math.random() * 0.3,
+          maxLife: 0.5,
+          size: 2 + Math.random() * 3,
+          color: Math.random() > 0.5 ? '#ffaa00' : '#ffdd00'
+        });
+      }
+
+      const isAiming = mouse.rightDown;
+      const cone = isAiming ? currentWeapon.aimCone : currentWeapon.cone;
+      const range = isAiming ? currentWeapon.aimRange : currentWeapon.range;
+      
+      const pellets = (currentWeapon.weaponType === 'shotgun') ? 8 : 1;
+      
+      let hitAny = false;
+      for (let p = 0; p < pellets; p++) {
+        const spread = (Math.random() - 0.5) * (cone * Math.PI / 180);
+        const angle = player.angle + spread;
+        
+        const endX = player.x + Math.cos(angle) * range;
+        const endY = player.y + Math.sin(angle) * range;
+        
+        trails.push({
+          x1: barrelX, y1: barrelY,
+          x2: endX, y2: endY, life: 0.18
+        });
+
+        let hitSomething = false;
+        
+        // Check outdoor zombies
+        for (let i = zombies.length - 1; i >= 0; i--) {
+          const z = zombies[i];
+          if (z.health <= 0) continue; // BUGFIX: Skip dead zombies
+          
+          const dist = Math.hypot(z.x - player.x, z.y - player.y);
+          if (dist > range) continue;
+          
+          const dx = z.x - player.x;
+          const dy = z.y - player.y;
+          const angleToZombie = Math.atan2(dy, dx);
+          const angleDiff = Math.abs(normalizeAngle(angleToZombie - angle));
+          
+          const angularSize = Math.atan(z.radius / dist);
+          
+          if (angleDiff < angularSize) {
+            const dmg = currentWeapon.damage * (1 + currentWeapon.upgrades.damage / 100);
+            z.health -= dmg;
+            playSound('hit');
+            hitSomething = true;
+            hitAny = true;
+            
+            // Enhanced blood splatter
+            bloodSplatters.push({
+              x: z.x,
+              y: z.y,
+              size: 15 + Math.random() * 10,
+              drops: 8 + Math.floor(Math.random() * 6),
+              alpha: 0.8,
+              life: 4,
+              rotation: Math.random() * Math.PI * 2
+            });
+            
+            // Add blood particles
+            for (let bp = 0; bp < 8; bp++) {
+              const bAngle = Math.random() * Math.PI * 2;
+              const bSpeed = 50 + Math.random() * 100;
+              particles.push({
+                x: z.x,
+                y: z.y,
+                vx: Math.cos(bAngle) * bSpeed,
+                vy: Math.sin(bAngle) * bSpeed,
+                life: 0.5 + Math.random() * 0.5,
+                maxLife: 1,
+                size: 2 + Math.random() * 2,
+                color: '#8b0000'
+              });
+            }
+            
+            if (z.health <= 0) {
+              // Death animation particles
+              for (let dp = 0; dp < 20; dp++) {
+                const dAngle = Math.random() * Math.PI * 2;
+                const dSpeed = 80 + Math.random() * 120;
+                particles.push({
+                  x: z.x,
+                  y: z.y,
+                  vx: Math.cos(dAngle) * dSpeed,
+                  vy: Math.sin(dAngle) * dSpeed,
+                  life: 0.8 + Math.random() * 0.8,
+                  maxLife: 1.6,
+                  size: 3 + Math.random() * 4,
+                  color: Math.random() > 0.5 ? '#8b0000' : '#5a0000'
+                });
+              }
+              
+              zombies.splice(i, 1);
+              currency += 10 + day * 2;
+              kills++;
+            }
+            
+            if (pellets === 1) break;
+          }
+        }
+
+        // Check indoor zombies
+        for (const b of buildings) {
+          for (let i = b.zombiesInside.length - 1; i >= 0; i--) {
+            const z = b.zombiesInside[i];
+            if (z.health <= 0) continue; // BUGFIX: Skip dead zombies
+            
+            const dist = Math.hypot(z.x - player.x, z.y - player.y);
+            if (dist > range) continue;
+            
+            const dx = z.x - player.x;
+            const dy = z.y - player.y;
+            const angleToZombie = Math.atan2(dy, dx);
+            const angleDiff = Math.abs(normalizeAngle(angleToZombie - angle));
+            
+            const angularSize = Math.atan(z.radius / dist);
+            
+            if (angleDiff < angularSize) {
+              const dmg = currentWeapon.damage * (1 + currentWeapon.upgrades.damage / 100);
+              z.health -= dmg;
+              playSound('hit');
+              hitSomething = true;
+              hitAny = true;
+              
+              bloodSplatters.push({
+                x: z.x,
+                y: z.y,
+                size: 15 + Math.random() * 10,
+                drops: 8 + Math.floor(Math.random() * 6),
+                alpha: 0.8,
+                life: 4,
+                rotation: Math.random() * Math.PI * 2
+              });
+              
+              if (z.health <= 0) {
+                b.zombiesInside.splice(i, 1);
+                currency += 10 + day * 2;
+                kills++;
+              }
+              
+              if (pellets === 1) break;
+            }
+          }
+        }
+      }
+
+      if (hitAny) {
+        showHitMarker();
+      }
+    }
+
+    function startReload(weapon) {
+      if (!weapon || weapon.reloading || weapon.reserve <= 0 || weapon.mag === weapon.magSize) return;
+      weapon.reloading = true;
+      weapon.reloadStart = performance.now();
+      playSound('reload');
+    }
+
+    function updateReload(weapon) {
+      if (!weapon || !weapon.reloading) return;
+      const elapsed = performance.now() - weapon.reloadStart;
+      if (elapsed >= weapon.reloadTime) {
+        const needed = weapon.magSize - weapon.mag;
+        const toReload = Math.min(needed, weapon.reserve);
+        weapon.mag += toReload;
+        weapon.reserve -= toReload;
+        weapon.reloading = false;
+      }
+    }
+
+    // NEW: Loot box generation system with rarity
+    function generateLoot() {
+      const roll = Math.random();
+      if (roll < 0.45) {
+        const ammoTypes = ['pistol', 'rifle', 'shotgun', 'sniper'];
+        const ammoType = ammoTypes[Math.floor(Math.random() * ammoTypes.length)];
+        const boxData = AMMO_BOXES[ammoType];
+        return { ...boxData, id: 'ammo_' + Date.now() + '_' + Math.random(), type: 'ammoBox', amount: boxData.amount };
+      }
+      if (roll < 0.70) {
+        const magTypes = ['pistol', 'rifle', 'sniper', 'box'];
+        const magType = magTypes[Math.floor(Math.random() * magTypes.length)];
+        const magData = MAGAZINE_TYPES[magType];
+        return { ...magData, id: 'mag_' + Date.now() + '_' + Math.random(), type: 'magazine', currentAmmo: Math.floor(magData.capacity * (0.5 + Math.random() * 0.5)) };
+      }
+      if (roll < 0.90) {
+        const weaponPool = [];
+        const weaponRoll = Math.random();
+        if (weaponRoll < 0.5) weaponPool.push('pistol', 'knife');
+        else if (weaponRoll < 0.75) weaponPool.push('dblbarrel', 'crowbar', 'deagle');
+        else if (weaponRoll < 0.90) weaponPool.push('m4a1', 'spas');
+        else if (weaponRoll < 0.98) weaponPool.push('sniper', 'spas');
+        else weaponPool.push('m249');
+        const weaponId = weaponPool[Math.floor(Math.random() * weaponPool.length)];
+        const weapon = JSON.parse(JSON.stringify(WEAPONS[weaponId]));
+        weapon.mag = Math.floor(weapon.magSize * Math.random());
+        weapon.reserve = 0;
+        weapon.type = weapon.type || (weapon.slot === 1 ? 'primary' : weapon.slot === 2 ? 'secondary' : 'melee');
+        weapon.id = 'weapon_' + Date.now() + '_' + Math.random();
+        return weapon;
+      }
+      if (roll < 0.97) {
+        const backpackTypes = ['military', 'tactical', 'raid'];
+        const bpType = backpackTypes[Math.floor(Math.random() * backpackTypes.length)];
+        const backpack = JSON.parse(JSON.stringify(BACKPACKS[bpType]));
+        backpack.type = 'backpack'; backpack.gridWidth = 3; backpack.gridHeight = 3;
+        return backpack;
+      }
+      const vestTypes = ['tactical', 'assault', 'operator'];
+      const vestType = vestTypes[Math.floor(Math.random() * vestTypes.length)];
+      const vest = JSON.parse(JSON.stringify(VESTS[vestType]));
+      vest.type = 'vest'; vest.gridWidth = 3; vest.gridHeight = 2;
+      return vest;
+    }
+
+    // NEW: Open loot box
+    function openLootBox(box) {
+      if (box.opened) return;
+      
+      box.opened = true;
+      playSound('loot');
+      
+      const loot = generateLoot();
+      
+      if (loot.type === 'ammoBox') {
+        const pos = findEmptyPositionForItem(loot);
+        if (pos) {
+          placeItemInGrid(loot, pos.row, pos.col);
+          showNotification(`📦 Found ${loot.name}!`);
+        } else {
+          showNotification('⚠️ Backpack full!');
+        }
+      } else if (loot.type === 'magazine') {
+        const pos = findEmptyPositionForItem(loot);
+        if (pos) {
+          placeItemInGrid(loot, pos.row, pos.col);
+          showNotification(`📦 Found ${loot.name}!`);
+        } else {
+          showNotification('⚠️ Backpack full!');
+        }
+      } else if (loot.type === 'backpack' || loot.type === 'vest') {
+        const pos = findEmptyPositionForItem(loot);
+        if (pos) {
+          placeItemInGrid(loot, pos.row, pos.col);
+          showNotification(`📦 Found ${loot.icon} ${loot.name}!`);
+        } else {
+          showNotification('⚠️ Backpack full!');
+        }
+      } else if (loot.gridWidth && (loot.weaponType || loot.slot)) {
+        const pos = findEmptyPositionForItem(loot);
+        if (pos) {
+          placeItemInGrid(loot, pos.row, pos.col);
+          showNotification(`📦 Found ${loot.icon} ${loot.name}!`);
+        } else {
+          showNotification('⚠️ Backpack full!');
+        }
+      }
+      renderTarkovInventory();
+    }
+
+    // NEW: Check for nearby loot boxes
+    function checkLootBoxInteraction() {
+      nearestLootBox = null;
+      let minDist = LOOT_BOX_INTERACT_RANGE;
+      
+      for (const box of lootBoxes) {
+        if (box.opened) continue;
+        const dist = Math.hypot(box.x - player.x, box.y - player.y);
+        if (dist < minDist) {
+          minDist = dist;
+          nearestLootBox = box;
+        }
+      }
+      
+      const prompt = document.getElementById('lootPrompt');
+      if (nearestLootBox) {
+        prompt.classList.add('active');
+      } else {
+        prompt.classList.remove('active');
+      }
+    }
+
+    function update(dt) {
+      if (gameOver) return;
+
+      gameTime += dt;
+      dayTime += dt;
+
+      if (dayTime >= DAY_LENGTH) {
+        day++;
+        dayTime = 0;
+        spawnZombieWave();
+      }
+
+      let dx = 0, dy = 0;
+      if (keys['w']) dy -= 1;
+      if (keys['s']) dy += 1;
+      if (keys['a']) dx -= 1;
+      if (keys['d']) dx += 1;
+      
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy);
+        dx /= len;
+        dy /= len;
+        
+        let speed = player.speed;
+        if (player.armor) speed += player.armor.mobility;
+        
+        const newX = player.x + dx * speed * dt;
+        const newY = player.y + dy * speed * dt;
+        
+        if (!checkBuildingCollision(newX, player.y, player.radius)) {
+          player.x = newX;
+        }
+        if (!checkBuildingCollision(player.x, newY, player.radius)) {
+          player.y = newY;
+        }
+        
+        player.x = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.x));
+        player.y = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.y));
+      }
+
+      const worldMouseX = camera.x + (mouse.x - W/2);
+      const worldMouseY = camera.y + (mouse.y - H/2);
+      player.angle = Math.atan2(worldMouseY - player.y, worldMouseX - player.x);
+
+      camera.x += (player.x - camera.x) * 0.1;
+      camera.y += (player.y - camera.y) * 0.1;
+
+      // Update zombies (only outdoor zombies)
+      for (let i = zombies.length - 1; i >= 0; i--) {
+        const z = zombies[i];
+        // Safety check: remove any zombies with invalid positions or health
+        if (z.health <= 0 || z.x < -100 || z.x > WORLD_SIZE + 100 || z.y < -100 || z.y > WORLD_SIZE + 100) {
+          zombies.splice(i, 1);
+          continue;
+        }
+        updateZombieAI(z, dt);
+      }
+
+      for (const b of buildings) {
+        // Indoor zombies are frozen until building is revealed - no AI updates needed
+        // Reveal buildings only when player enters door threshold
+        if (!b.explored) {
+          const doorCenterX = b.doorX + b.doorW/2;
+          const doorCenterY = b.doorY + b.doorH/2;
+          const doorThreshold = 50; // Smaller threshold for more precise door entry
+          
+          // Check if player is actually at the door (not just near it)
+          const distToDoor = Math.hypot(player.x - doorCenterX, player.y - doorCenterY);
+          if (distToDoor < doorThreshold) {
+            b.explored = true;
+            // Indoor zombies become active but stay in their original positions inside the house
+            for (let i = b.zombiesInside.length - 1; i >= 0; i--) {
+              const iz = b.zombiesInside[i];
+              // Move zombie to main zombies array but keep their original indoor position
+              zombies.push({
+                x: iz.x, // Keep original position inside house
+                y: iz.y, // Keep original position inside house
+                radius: iz.radius,
+                health: iz.health,
+                maxHealth: iz.maxHealth,
+                speed: iz.speed,
+                wanderAngle: Math.random() * Math.PI * 2,
+                wanderTimer: 0,
+                state: 'wander',
+                animOffset: Math.random() * Math.PI * 2,
+                // Mark as recently revealed so they can be targeted
+                recentlyRevealed: true
+              });
+              b.zombiesInside.splice(i, 1);
+            }
+          }
+        }
+      }
+
+      // Update particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 200 * dt; // Gravity
+        p.vx *= 0.95;
+        p.vy *= 0.95;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      for (let i = trails.length - 1; i >= 0; i--) {
+        trails[i].life -= dt;
+        if (trails[i].life <= 0) trails.splice(i, 1);
+      }
+
+      for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
+        muzzleFlashes[i].life -= dt;
+        if (muzzleFlashes[i].life <= 0) muzzleFlashes.splice(i, 1);
+      }
+
+      for (let i = bloodSplatters.length - 1; i >= 0; i--) {
+        bloodSplatters[i].life -= dt;
+        bloodSplatters[i].alpha = Math.max(0, bloodSplatters[i].life / 4);
+        if (bloodSplatters[i].life <= 0) bloodSplatters.splice(i, 1);
+      }
+
+      // Update loot boxes pulse animation
+      for (const box of lootBoxes) {
+        box.pulsePhase += dt * 3;
+      }
+
+      if (currentWeapon?.automatic && mouse.leftDown) {
+        tryShoot();
+      }
+
+      updateReload(currentWeapon);
+      checkLootBoxInteraction();
+
+      const tileX = Math.floor(player.x / TILE_SIZE);
+      const tileY = Math.floor(player.y / TILE_SIZE);
+      const visionRange = 8;
+      for (let dx = -visionRange; dx <= visionRange; dx++) {
+        for (let dy = -visionRange; dy <= visionRange; dy++) {
+          if (dx*dx + dy*dy <= visionRange*visionRange) {
+            exploredMap.add(`${tileX + dx},${tileY + dy}`);
+          }
+        }
+      }
+
+      for (const b of buildings) {
+        if (player.x > b.x && player.x < b.x + b.w && player.y > b.y && player.y < b.y + b.h) {
+          b.explored = true;
+        }
+      }
+
+      updateHUD();
+    }
+
+    function draw() {
+      ctx.fillStyle = '#0a0e14';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.translate(W/2 - camera.x, H/2 - camera.y);
+
+      // Day/Night cycle with enhanced lighting
+      const hour = 6 + (dayTime / DAY_LENGTH) * 24;
+      let brightness = 1;
+      let fogAlpha = 0;
+      
+      if (hour < 6 || hour >= 20) {
+        brightness = 0.25;
+        fogAlpha = 0.3;
+      } else if (hour < 8) {
+        brightness = 0.25 + ((hour - 6) / 2) * 0.75;
+        fogAlpha = 0.3 * (1 - (hour - 6) / 2);
+      } else if (hour >= 18) {
+        brightness = 1 - ((hour - 18) / 2) * 0.75;
+        fogAlpha = 0.3 * ((hour - 18) / 2);
+      }
+
+      ctx.globalAlpha = brightness;
+
+      // Draw terrain
+      for (const tile of terrainTiles) {
+        if (tile.type === 'grass') {
+          const shade = 30 + tile.shade * 20;
+          ctx.fillStyle = `rgb(${shade}, ${shade + 35}, ${shade + 10})`;
+        } else if (tile.type === 'street') {
+          const shade = 50 + tile.shade * 15;
+          ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade + 5})`;
+        } else {
+          ctx.fillStyle = 'rgba(80,80,90,0.3)';
+        }
+        ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+      }
+
+      // Decorations
+      for (const d of decorations) {
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        if (d.type === 'car') {
+          ctx.fillStyle = 'rgba(40,40,40,0.95)';
+          ctx.fillRect(-d.size/2, -d.size/3, d.size, d.size/1.8);
+          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-d.size/2, -d.size/3, d.size, d.size/1.8);
+          ctx.fillStyle = 'rgba(140,60,20,0.7)';
+          ctx.fillRect(-d.size/4, -d.size/4, d.size/6, d.size/6);
+        } else if (d.type === 'trash') {
+          ctx.fillStyle = 'rgba(90,90,90,0.9)';
+          ctx.beginPath();
+          ctx.arc(0, 0, d.size/2, 0, Math.PI * 2);
+          ctx.fill();
+        } else { // debris
+          ctx.fillStyle = 'rgba(120,100,90,0.9)';
+          ctx.fillRect(-d.size/4, -d.size/4, d.size/2, d.size/2);
+        }
+        ctx.restore();
+      }
+
+      // Draw buildings (top-down): stronger outlines and clear doors, no windows
+      for (const b of buildings) {
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        
+        // Strong wall outline for visibility
+        ctx.strokeStyle = b.explored ? 'rgba(255,200,120,0.9)' : 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        
+        // Door with emphasized style
+        ctx.fillStyle = 'rgba(80,50,35,0.95)';
+        ctx.fillRect(b.doorX, b.doorY, b.doorW, b.doorH);
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(b.doorX, b.doorY, b.doorW, b.doorH);
+        
+        // Indoor zombies are now moved to main zombies array when revealed, so no need to draw them here
+      }
+
+      // Draw loot boxes
+      for (const box of lootBoxes) {
+        if (box.opened) continue;
+        if (!box.building.explored) continue;
+        
+        const pulse = Math.sin(box.pulsePhase) * 0.2 + 1;
+        const glowSize = box.size * pulse;
+        
+        // Glow effect
+        const grad = ctx.createRadialGradient(box.x, box.y, 0, box.x, box.y, glowSize);
+        grad.addColorStop(0, 'rgba(255,215,0,0.6)');
+        grad.addColorStop(0.5, 'rgba(255,215,0,0.3)');
+        grad.addColorStop(1, 'rgba(255,215,0,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(box.x - glowSize, box.y - glowSize, glowSize * 2, glowSize * 2);
+        
+        // Box
+        ctx.fillStyle = '#8b6914';
+        ctx.fillRect(box.x - box.size/2, box.y - box.size/2, box.size, box.size);
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(box.x - box.size/2, box.y - box.size/2, box.size, box.size);
+        
+        // Lock icon
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('📦', box.x, box.y);
+      }
+
+      ctx.globalAlpha = 1;
+
+      // Fog of war
+      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      for (let x = 0; x < WORLD_SIZE / TILE_SIZE; x++) {
+        for (let y = 0; y < WORLD_SIZE / TILE_SIZE; y++) {
+          if (!exploredMap.has(`${x},${y}`)) {
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          }
+        }
+      }
+
+      // Night fog effect
+      if (fogAlpha > 0) {
+        ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
+        ctx.fillRect(camera.x - W, camera.y - H, W * 3, H * 3);
+      }
+
+      // Draw blood splatters
+      for (const splat of bloodSplatters) {
+        ctx.globalAlpha = splat.alpha;
+        ctx.fillStyle = '#8b0000';
+        ctx.save();
+        ctx.translate(splat.x, splat.y);
+        ctx.rotate(splat.rotation);
+        for (let i = 0; i < splat.drops; i++) {
+          const angle = (i / splat.drops) * Math.PI * 2;
+          const dist = splat.size * (0.3 + Math.random() * 0.7);
+          ctx.beginPath();
+          ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 2 + Math.random() * 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+
+      // Draw particles
+      for (const p of particles) {
+        const alpha = p.life / p.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Draw zombies
+      for (const z of zombies) {
+        drawZombie(z);
+      }
+
+      // Draw aim cone
+      if (currentWeapon) {
+        const isAiming = mouse.rightDown;
+        const coneAngle = isAiming ? (currentWeapon.aimCone * Math.PI / 180) / 2 : (currentWeapon.cone * Math.PI / 180) / 2;
+        const range = isAiming ? currentWeapon.aimRange : currentWeapon.range;
+        const opacity = isAiming ? 0.12 : 0.06;
+        const borderOpacity = isAiming ? 0.35 : 0.18;
+        
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.arc(player.x, player.y, range, player.angle - coneAngle, player.angle + coneAngle);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(0,255,136,${opacity})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(0,255,136,${borderOpacity})`;
+        ctx.lineWidth = isAiming ? 2 : 1;
+        ctx.stroke();
+      }
+
+      // Draw trails
+      for (const t of trails) {
+        ctx.beginPath();
+        ctx.moveTo(t.x1, t.y1);
+        ctx.lineTo(t.x2, t.y2);
+        const a = Math.max(0, t.life / 0.18);
+        ctx.strokeStyle = `rgba(255,240,160,${a * 0.8})`;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255,240,180,${a})`;
+        ctx.arc(t.x2, t.y2, 3.5 * a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ENHANCED: Improved muzzle flashes with realistic lighting
+      for (const mf of muzzleFlashes) {
+        const a = mf.life / 0.12;
+        ctx.save();
+        ctx.translate(mf.x, mf.y);
+        ctx.rotate(mf.angle);
+        
+        // Multi-layer radial gradient for realistic effect
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, mf.size * 1.5);
+        grad.addColorStop(0, `rgba(255,255,255,${a})`);
+        grad.addColorStop(0.2, `rgba(255,255,200,${a})`);
+        grad.addColorStop(0.4, `rgba(255,200,100,${a * 0.8})`);
+        grad.addColorStop(0.6, `rgba(255,120,0,${a * 0.5})`);
+        grad.addColorStop(0.8, `rgba(255,60,0,${a * 0.2})`);
+        grad.addColorStop(1, `rgba(255,0,0,0)`);
+        
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, mf.size * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add directional cone
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(mf.size * 2, -mf.size * 0.5);
+        ctx.lineTo(mf.size * 2, mf.size * 0.5);
+        ctx.closePath();
+        const coneGrad = ctx.createLinearGradient(0, 0, mf.size * 2, 0);
+        coneGrad.addColorStop(0, `rgba(255,255,200,${a * 0.6})`);
+        coneGrad.addColorStop(0.5, `rgba(255,150,50,${a * 0.3})`);
+        coneGrad.addColorStop(1, `rgba(255,100,0,0)`);
+        ctx.fillStyle = coneGrad;
+        ctx.fill();
+        
+        ctx.restore();
+      }
+
+      // Draw player
+      ctx.beginPath();
+      ctx.fillStyle = '#cfe9ff';
+      ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw weapon
+      if (currentWeapon && currentWeapon.weaponType !== 'melee') {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(player.angle);
+        
+        if (currentWeapon.weaponType === 'pistol') {
+          ctx.fillStyle = '#2a2a2a';
+          ctx.fillRect(0, -3, currentWeapon.barrelLength, 6);
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(0, -5, 8, 10);
+        } else if (currentWeapon.weaponType === 'rifle') {
+          ctx.fillStyle = '#2a2a2a';
+          ctx.fillRect(0, -2, currentWeapon.barrelLength, 4);
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(-5, -6, 12, 12);
+          ctx.fillRect(currentWeapon.barrelLength - 8, -3, 8, 6);
+        } else if (currentWeapon.weaponType === 'shotgun') {
+          ctx.fillStyle = '#3a2a1a';
+          ctx.fillRect(0, -4, currentWeapon.barrelLength, 8);
+          ctx.fillStyle = '#2a1a0a';
+          ctx.fillRect(-6, -7, 14, 14);
+        } else if (currentWeapon.weaponType === 'sniper') {
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(0, -2, currentWeapon.barrelLength, 4);
+          ctx.fillStyle = '#0a0a0a';
+          ctx.fillRect(-8, -6, 16, 12);
+          ctx.fillRect(currentWeapon.barrelLength - 10, -3, 10, 6);
+        }
+        
+        ctx.restore();
+      }
+      
+      // Player direction indicator
+      ctx.beginPath();
+      ctx.strokeStyle = '#10304f';
+      ctx.lineWidth = 3;
+      ctx.moveTo(player.x, player.y);
+      ctx.lineTo(player.x + Math.cos(player.angle) * (player.radius + 8), 
+                 player.y + Math.sin(player.angle) * (player.radius + 8));
+      ctx.stroke();
+
+      ctx.restore();
+
+      // Flashlight overlay as a forward cone restoring brightness
+      if (flashlightOn) {
+        ctx.save();
+        // Darken screen
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(0, 0, W, H);
+        // Define cone
+        const coneAngle = Math.PI / 6; // 30 degrees half-angle
+        ctx.translate(W/2, H/2);
+        ctx.rotate(player.angle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(800, -800 * Math.tan(coneAngle));
+        ctx.lineTo(800, 800 * Math.tan(coneAngle));
+        ctx.closePath();
+        // Cut out cone to daylight brightness
+        ctx.globalCompositeOperation = 'destination-out';
+        const grad2 = ctx.createLinearGradient(0, 0, 800, 0);
+        grad2.addColorStop(0, 'rgba(0,0,0,0)');
+        grad2.addColorStop(1, 'rgba(0,0,0,1)');
+        ctx.fillStyle = grad2;
+        ctx.fill();
+        ctx.restore();
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      // Draw crosshair
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(0,255,136,0.6)';
+      ctx.lineWidth = 2;
+      ctx.arc(mouse.x, mouse.y, 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(mouse.x - 12, mouse.y);
+      ctx.lineTo(mouse.x + 12, mouse.y);
+      ctx.moveTo(mouse.x, mouse.y - 12);
+      ctx.lineTo(mouse.x, mouse.y + 12);
+      ctx.stroke();
+
+      drawMinimap();
+    }
+
+    function drawZombie(z) {
+      // Minecraft-style top-down: green circle body with two rectangular arms
+      const bob = Math.sin((performance.now()/300) + (z.animOffset||0)) * 2;
+      
+      // Shadow
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.ellipse(z.x + 4, z.y + 8, z.radius + 5, z.radius + 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Body
+      ctx.beginPath();
+      ctx.fillStyle = '#1fbf2b';
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 2;
+      ctx.arc(z.x, z.y + bob, z.radius + 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      // Arms
+      ctx.fillStyle = '#127f18';
+      ctx.fillRect(z.x - z.radius - 6, z.y - 4 + bob, 8, 12);
+      ctx.fillRect(z.x + z.radius - 2, z.y - 4 + bob, 8, 12);
+    }
+
+    function drawMinimap() {
+      mmCtx.fillStyle = '#000';
+      mmCtx.fillRect(0, 0, 220, 220);
+
+      const scale = 220 / WORLD_SIZE;
+
+      // Draw explored tiles
+      for (const tile of exploredMap) {
+        const [tx, ty] = tile.split(',').map(Number);
+        mmCtx.fillStyle = 'rgba(40,80,40,0.3)';
+        mmCtx.fillRect(tx * TILE_SIZE * scale, ty * TILE_SIZE * scale, TILE_SIZE * scale, TILE_SIZE * scale);
+      }
+
+      // Draw buildings
+      for (const b of buildings) {
+        mmCtx.fillStyle = b.explored ? 'rgba(120,90,70,0.8)' : 'rgba(50,50,50,0.5)';
+        mmCtx.fillRect(b.x * scale, b.y * scale, b.w * scale, b.h * scale);
+      }
+
+      // Draw loot boxes
+      for (const box of lootBoxes) {
+        if (!box.opened && box.building.explored) {
+          mmCtx.fillStyle = '#ffd700';
+          mmCtx.fillRect(box.x * scale - 1, box.y * scale - 1, 3, 3);
+        }
+      }
+
+      // Remove zombie markers from minimap (intentionally omitted)
+
+      // Draw player
+      mmCtx.fillStyle = '#00ff88';
+      mmCtx.beginPath();
+      mmCtx.arc(player.x * scale, player.y * scale, 4, 0, Math.PI * 2);
+      mmCtx.fill();
+      
+      mmCtx.strokeStyle = '#00ff88';
+      mmCtx.lineWidth = 2;
+      mmCtx.beginPath();
+      mmCtx.arc(player.x * scale, player.y * scale, 6, 0, Math.PI * 2);
+      mmCtx.stroke();
+    }
+
+    function normalizeAngle(a) {
+      while (a <= -Math.PI) a += 2 * Math.PI;
+      while (a > Math.PI) a -= 2 * Math.PI;
+      return a;
+    }
+
+    function updateHUD() {
+      document.getElementById('healthVal').textContent = Math.round(player.health);
+      document.getElementById('healthFill').style.width = (player.health / player.maxHealth * 100) + '%';
+      document.getElementById('currencyVal').textContent = currency;
+      document.getElementById('dayNum').textContent = day;
+      document.getElementById('killCount').textContent = kills;
+      
+      const hour = Math.floor(6 + (dayTime / DAY_LENGTH) * 24) % 24;
+      const minute = Math.floor(((6 + (dayTime / DAY_LENGTH) * 24) % 1) * 60);
+      document.getElementById('clockTime').textContent = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      
+      if (hour >= 6 && hour < 20) {
+        document.getElementById('timeOfDay').textContent = hour < 12 ? '☀️' : '🌤️';
+      } else {
+        document.getElementById('timeOfDay').textContent = '🌙';
+      }
+      
+      const totalZombies = zombies.length + buildings.reduce((sum, b) => sum + b.zombiesInside.length, 0);
+      document.getElementById('zombieCount').textContent = totalZombies;
+
+      updateWeaponSlot('slot1', inventory.slot1, 1);
+      updateWeaponSlot('slot2', inventory.slot2, 2);
+      updateWeaponSlot('slot3', inventory.slot3, 3);
+
+      if (currentWeapon) {
+        document.getElementById('ammoDisplay').textContent = `${currentWeapon.mag} / ${currentWeapon.magSize}`;
+        document.getElementById('reserveAmmo').textContent = `Reserve: ${currentWeapon.reserve}`;
+        // Render weapon slot silhouettes (simple inline SVGs for COD-like feel)
+        const renderIcon = (weapon) => {
+          if (!weapon) return '-';
+          if (weapon.weaponType === 'rifle') {
+            return '<svg viewBox="0 0 64 16" aria-hidden="true"><path d="M2 9h32l10-3h8v4h-8l-10-3H2zM12 6h6v6h-6z"/></svg>';
+          } else if (weapon.weaponType === 'shotgun') {
+            return '<svg viewBox="0 0 64 16" aria-hidden="true"><path d="M2 9h40l6-2h12v4H48l-6-2H2z"/></svg>';
+          } else if (weapon.weaponType === 'sniper') {
+            return '<svg viewBox="0 0 64 16" aria-hidden="true"><path d="M2 9h46l4-1h10v2H52l-4-1H2zM20 6h8v6h-8z"/></svg>';
+          } else if (weapon.weaponType === 'pistol') {
+            return '<svg viewBox="0 0 32 16" aria-hidden="true"><path d="M2 9h16l4-2h6v3h-6l-4-1H2z"/></svg>';
+          } else if (weapon.weaponType === 'melee') {
+            return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 7h12v2H2z"/></svg>';
+          }
+          return weapon.icon || '-';
+        };
+        const s1 = document.querySelector('#slot1 .weapon-icon');
+        const s2 = document.querySelector('#slot2 .weapon-icon');
+        const s3 = document.querySelector('#slot3 .weapon-icon');
+        if (s1) s1.innerHTML = inventory.slot1 ? renderIcon(inventory.slot1) : '-';
+        if (s2) s2.innerHTML = inventory.slot2 ? renderIcon(inventory.slot2) : '-';
+        if (s3) s3.innerHTML = inventory.slot3 ? renderIcon(inventory.slot3) : '-';
+      }
+    }
+
+    function updateWeaponSlot(slotId, weapon, slotNum) {
+      const el = document.getElementById(slotId);
+      if (weapon) {
+        el.classList.remove('empty');
+        el.querySelector('.weapon-icon').textContent = weapon.icon;
+        if (inventory.currentSlot === slotNum) {
+          el.classList.add('active');
+        } else {
+          el.classList.remove('active');
+        }
+      } else {
+        el.classList.add('empty');
+        el.querySelector('.weapon-icon').textContent = '-';
+        el.classList.remove('active');
+      }
+    }
+
+    function openShop() {
+      shopOpen = true;
+      document.getElementById('shopOverlay').classList.add('active');
+      renderShop();
+    }
+
+    function closeShop() {
+      shopOpen = false;
+      document.getElementById('shopOverlay').classList.remove('active');
+    }
+
+    function toggleShop() {
+      if (shopOpen) closeShop();
+      else openShop();
+    }
+
+    function switchShopTab(tab) {
+      currentShopTab = tab;
+      document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      renderShop();
+    }
+
+    function renderShop() {
+      const content = document.getElementById('shopContent');
+      
+      if (currentShopTab === 'weapons') {
+        const items = Object.values(WEAPONS).filter(w => w.price > 0);
+        content.innerHTML = `<div class="shop-items">${items.map(w => `
+          <div class="shop-item" onclick="buyWeapon('${w.id}')">
+            <div class="item-name">${w.icon} ${w.name}</div>
+            <div class="item-stats">
+              <div class="stat-bar">
+                <span class="stat-bar-label">Damage</span>
+                <div class="stat-bar-fill">
+                  <div class="stat-bar-inner" style="width:${w.damage}%"></div>
+                </div>
+              </div>
+              <div class="stat-bar">
+                <span class="stat-bar-label">Range</span>
+                <div class="stat-bar-fill">
+                  <div class="stat-bar-inner" style="width:${w.aimRange / 8}%"></div>
+                </div>
+              </div>
+              <div class="stat-bar">
+                <span class="stat-bar-label">Fire Rate</span>
+                <div class="stat-bar-fill">
+                  <div class="stat-bar-inner" style="width:${100 - w.cooldown / 15}%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="item-price">$${w.price}</div>
+          </div>
+        `).join('')}</div>`;
+      } else if (currentShopTab === 'armor') {
+        const items = Object.values(ARMOR);
+        content.innerHTML = `<div class="shop-items">${items.map(a => `
+          <div class="shop-item" onclick="buyArmor('${a.id}')">
+            <div class="item-name">🛡️ ${a.name}</div>
+            <div class="item-stats">
+              <div class="stat-bar">
+                <span class="stat-bar-label">Protection</span>
+                <div class="stat-bar-fill">
+                  <div class="stat-bar-inner" style="width:${a.protection}%"></div>
+                </div>
+              </div>
+              <div class="stat-bar">
+                <span class="stat-bar-label">Durability</span>
+                <div class="stat-bar-fill">
+                  <div class="stat-bar-inner" style="width:${a.durability / 2}%"></div>
+                </div>
+              </div>
+              <div class="stat-bar">
+                <span class="stat-bar-label">Mobility</span>
+                <div class="stat-bar-fill">
+                  <div class="stat-bar-inner" style="width:${100 + a.mobility}%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="item-price">$${a.price}</div>
+          </div>
+        `).join('')}</div>`;
+      } else if (currentShopTab === 'ammo') {
+        content.innerHTML = `<div class="shop-items">
+          <div class="shop-item" onclick="buyAmmo('pistol', 30, 50)">
+            <div class="item-name">🔫 Pistol Ammo</div>
+            <div>+30 rounds</div>
+            <div class="item-price">$50</div>
+          </div>
+          <div class="shop-item" onclick="buyAmmo('rifle', 60, 100)">
+            <div class="item-name">🔫 Rifle Ammo</div>
+            <div>+60 rounds</div>
+            <div class="item-price">$100</div>
+          </div>
+          <div class="shop-item" onclick="buyAmmo('shotgun', 20, 80)">
+            <div class="item-name">🔫 Shotgun Ammo</div>
+            <div>+20 shells</div>
+            <div class="item-price">$80</div>
+          </div>
+          <div class="shop-item" onclick="buyAmmo('sniper', 10, 150)">
+            <div class="item-name">🔫 Sniper Ammo</div>
+            <div>+10 rounds</div>
+            <div class="item-price">$150</div>
+          </div>
+        </div>`;
+      } else if (currentShopTab === "gear") {
+        const backpacks = Object.values(BACKPACKS).filter(b => b.price > 0);
+        const vests = Object.values(VESTS).filter(v => v.price > 0);
+        content.innerHTML = `<div class="shop-items">${backpacks.map(b => `
+          <div class="shop-item" onclick="buyBackpack('${b.id}')">
+            <div class="item-name">${b.icon} ${b.name}</div>
+            <div>Grid: ${b.cols}x${b.rows} (${b.cols * b.rows} cells)</div>
+            <div class="item-price">\$${b.price}</div>
+          </div>
+        `).join("")}${vests.map(v => `
+          <div class="shop-item" onclick="buyVest('${v.id}')">
+            <div class="item-name">${v.icon} ${v.name}</div>
+            <div>Magazine Slots: ${v.magSlots}</div>
+            <div class="item-price">\$${v.price}</div>
+          </div>
+        `).join("")}</div>`;
+
+      } else if (currentShopTab === 'upgrades') {
+        const items = Object.values(UPGRADES);
+        content.innerHTML = `<div class="shop-items">${items.map(u => `
+          <div class="shop-item" onclick="buyUpgrade('${u.name}')">
+            <div class="item-name">⚡ ${u.name}</div>
+            <div class="item-price">$${u.price}</div>
+          </div>
+        `).join('')}</div>`;
+      }
+    }
+
+    function buyWeapon(id) {
+      const weapon = JSON.parse(JSON.stringify(WEAPONS[id]));
+      if (currency >= weapon.price) {
+        currency -= weapon.price;
+        
+        // Reset weapon state
+        weapon.mag = weapon.magSize;
+        weapon.reserve = weapon.magSize * 3;
+        weapon.lastShot = 0;
+        weapon.reloading = false;
+        weapon.reloadStart = 0;
+        
+        // Add to appropriate slot
+        if (weapon.slot === 1) {
+          if (inventory.slot1) inventory.storedWeapons.push(inventory.slot1);
+          inventory.slot1 = weapon;
+          inventory.currentSlot = 1;
+          currentWeapon = weapon;
+        } else if (weapon.slot === 2) {
+          if (inventory.slot2) inventory.storedWeapons.push(inventory.slot2);
+          inventory.slot2 = weapon;
+          inventory.currentSlot = 2;
+          currentWeapon = weapon;
+        } else if (weapon.slot === 3) {
+          if (inventory.slot3) inventory.storedWeapons.push(inventory.slot3);
+          inventory.slot3 = weapon;
+        }
+        
+        showNotification(`✅ Purchased ${weapon.name}`);
+        renderShop();
+      } else {
+        showNotification('❌ Not enough money!');
+      }
+    }
+
+    function buyArmor(id) {
+      const armor = ARMOR[id];
+      if (currency >= armor.price) {
+        currency -= armor.price;
+        player.armor = JSON.parse(JSON.stringify(armor));
+        showNotification(`✅ Purchased ${armor.name}`);
+        renderShop();
+      } else {
+        showNotification('❌ Not enough money!');
+      }
+    }
+
+
+    function buyBackpack(id) {
+      const backpack = JSON.parse(JSON.stringify(BACKPACKS[id]));
+      if (currency >= backpack.price) {
+        const oldBackpack = inventory.backpack;
+        if (oldBackpack && inventory.gridItems.length > 0) {
+          showNotification('❌ Empty backpack before buying a new one!');
+          return;
+        }
+        currency -= backpack.price;
+        inventory.backpack = backpack;
+        initializeBackpackGrid();
+        showNotification(`✅ Purchased ${backpack.name}`);
+        renderShop();
+      } else {
+        showNotification('❌ Not enough money!');
+      }
+    }
+
+    function buyVest(id) {
+      const vest = JSON.parse(JSON.stringify(VESTS[id]));
+      if (currency >= vest.price) {
+        const hasMags = inventory.magazineSlots.some(m => m !== null);
+        if (hasMags) {
+          showNotification('❌ Remove magazines from vest before buying a new one!');
+          return;
+        }
+        currency -= vest.price;
+        inventory.vest = vest;
+        initializeMagazineSlots();
+        showNotification(`✅ Purchased ${vest.name}`);
+        renderShop();
+      } else {
+        showNotification('❌ Not enough money!');
+      }
+    }
+    function buyAmmo(type, amount, cost) {
+      if (currency >= cost) {
+        currency -= cost;
+        inventory.storedAmmo[type] += amount;
+        showNotification(`✅ Purchased ${amount} ${type} ammo`);
+        renderShop();
+      } else {
+        showNotification('❌ Not enough money!');
+      }
+    }
+
+    function buyUpgrade(name) {
+      const upgrade = Object.values(UPGRADES).find(u => u.name === name);
+      if (!upgrade) return;
+      
+      if (currency >= upgrade.price) {
+        if (!currentWeapon) {
+          showNotification('❌ No weapon equipped!');
+          return;
+        }
+        
+        currency -= upgrade.price;
+        currentWeapon.upgrades[upgrade.stat] += upgrade.value;
+        showNotification(`✅ Upgraded ${currentWeapon.name}`);
+        renderShop();
+      } else {
+        showNotification('❌ Not enough money!');
+      }
+    }
+
+    function openInventory() {
+      inventoryOpen = true;
+      document.getElementById('inventoryPanel').classList.add('active');
+      renderInventory();
+      renderTarkovInventory();
+    }
+
+    function closeInventory() {
+      inventoryOpen = false;
+      document.getElementById('inventoryPanel').classList.remove('active');
+    }
+
+    function toggleInventory() {
+      if (inventoryOpen) closeInventory();
+      else openInventory();
+    }
+
+    // Enhanced inventory rendering with weapon storage
+    function renderInventory() {
+      const content = document.getElementById('inventoryContent');
+      
+      let html = '<div class="inv-section">';
+      html += '<div class="inv-title">⚔️ Equipped Weapons</div>';
+      
+      [inventory.slot1, inventory.slot2, inventory.slot3].forEach((weapon, idx) => {
+        if (weapon) {
+          html += `
+            <div class="weapon-details">
+              <div class="name">${weapon.icon} ${weapon.name} [Slot ${idx + 1}]</div>
+              <div class="stat-detail"><span>Damage:</span><span>${weapon.damage}</span></div>
+              <div class="stat-detail"><span>Range:</span><span>${weapon.aimRange}</span></div>
+              <div class="stat-detail"><span>Magazine:</span><span>${weapon.mag} / ${weapon.magSize}</span></div>
+              <div class="stat-detail"><span>Reserve:</span><span>${weapon.reserve}</span></div>
+            </div>
+          `;
+        }
+      });
+      
+      html += '</div>';
+      
+      // Stored weapons
+      if (inventory.storedWeapons.length > 0) {
+        html += '<div class="inv-section">';
+        html += '<div class="inv-title">📦 Stored Weapons (Click to Equip)</div>';
+        html += '<div class="inv-grid">';
+        inventory.storedWeapons.forEach((weapon, idx) => {
+          html += `
+            <div class="inv-item rarity-${weapon.rarity}" onclick="equipFromStorage(${idx})">
+              <div style="font-size:24px">${weapon.icon}</div>
+              <div style="font-weight:700;margin-top:8px">${weapon.name}</div>
+              <div style="font-size:12px;color:#9fb4d8;margin-top:4px">Slot ${weapon.slot}</div>
+            </div>
+          `;
+        });
+        html += '</div></div>';
+      }
+      
+      // Stored ammo
+      html += '<div class="inv-section">';
+      html += '<div class="inv-title">📦 Stored Ammo (Click to Transfer)</div>';
+      html += '<div class="inv-grid">';
+      for (const [type, amount] of Object.entries(inventory.storedAmmo)) {
+        if (amount > 0) {
+          html += `
+            <div class="inv-item" onclick="transferAmmo('${type}')">
+              <div style="font-size:24px">🔫</div>
+              <div style="font-weight:700;margin-top:8px">${type.toUpperCase()}</div>
+              <div style="color:#ffd700;font-size:18px;margin-top:4px">${amount} rounds</div>
+            </div>
+          `;
+        }
+      }
+      html += '</div></div>';
+      
+      if (player.armor) {
+        html += '<div class="inv-section">';
+        html += '<div class="inv-title">🛡️ Armor</div>';
+        html += `
+          <div class="weapon-details">
+            <div class="name">${player.armor.name}</div>
+            <div class="stat-detail"><span>Protection:</span><span>${player.armor.protection}%</span></div>
+            <div class="stat-detail"><span>Durability:</span><span>${Math.round(player.armor.durability)} / ${player.armor.maxDurability}</span></div>
+          </div>
+        `;
+        html += '</div>';
+      }
+      
+      content.innerHTML = html;
+    }
+
+    // NEW: Equip weapon from storage
+    function equipFromStorage(idx) {
+      const weapon = inventory.storedWeapons[idx];
+      if (!weapon) return;
+      
+      const targetSlot = weapon.slot;
+      
+      // Swap with current weapon in that slot
+      if (targetSlot === 1) {
+        if (inventory.slot1) inventory.storedWeapons.push(inventory.slot1);
+        inventory.slot1 = weapon;
+        inventory.currentSlot = 1;
+        currentWeapon = weapon;
+      } else if (targetSlot === 2) {
+        if (inventory.slot2) inventory.storedWeapons.push(inventory.slot2);
+        inventory.slot2 = weapon;
+        inventory.currentSlot = 2;
+        currentWeapon = weapon;
+      } else if (targetSlot === 3) {
+        if (inventory.slot3) inventory.storedWeapons.push(inventory.slot3);
+        inventory.slot3 = weapon;
+        inventory.currentSlot = 3;
+        currentWeapon = weapon;
+      }
+      
+      inventory.storedWeapons.splice(idx, 1);
+      showNotification(`✅ Equipped ${weapon.name}`);
+      renderInventory();
+    }
+
+    // NEW: Transfer ammo from storage to current weapon
+    function transferAmmo(type) {
+      if (!currentWeapon) {
+        showNotification('❌ No weapon equipped!');
+        return;
+      }
+      
+      // Determine weapon ammo type
+      let weaponAmmoType = null;
+      if (currentWeapon.weaponType === 'pistol') weaponAmmoType = 'pistol';
+      else if (currentWeapon.weaponType === 'rifle') weaponAmmoType = 'rifle';
+      else if (currentWeapon.weaponType === 'shotgun') weaponAmmoType = 'shotgun';
+      else if (currentWeapon.weaponType === 'sniper') weaponAmmoType = 'sniper';
+      
+      if (weaponAmmoType !== type) {
+        showNotification(`❌ ${currentWeapon.name} uses ${weaponAmmoType} ammo!`);
+        return;
+      }
+      
+      if (inventory.storedAmmo[type] <= 0) {
+        showNotification('❌ No ammo to transfer!');
+        return;
+      }
+      
+      const transferAmount = Math.min(inventory.storedAmmo[type], currentWeapon.magSize * 3);
+      currentWeapon.reserve += transferAmount;
+      inventory.storedAmmo[type] -= transferAmount;
+      
+      showNotification(`✅ Transferred ${transferAmount} ${type} ammo`);
+      renderInventory();
+    }
+
+    // TARKOV-STYLE INVENTORY RENDERING FUNCTIONS
+    
+    function renderTarkovInventory() {
+      renderBackpackGrid();
+      renderGridItems();
+      renderEquipmentSlots();
+      renderMagazineSlots();
+      renderCharacterCanvas();
+    }
+    
+    function renderBackpackGrid() {
+      const gridContainer = document.getElementById('backpackGrid');
+      if (!gridContainer) return;
+      
+      const backpack = inventory.backpack || BACKPACKS.starter;
+      const { cols, rows } = backpack;
+      
+      gridContainer.style.gridTemplateColumns = `repeat(${cols}, 48px)`;
+      gridContainer.style.gridTemplateRows = `repeat(${rows}, 48px)`;
+      
+      let html = '';
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const cellState = inventory.backpackGrid[row]?.[col];
+          const occupied = cellState && cellState !== 'empty';
+          html += `<div class="grid-cell ${occupied ? 'occupied' : ''}" data-row="${row}" data-col="${col}"></div>`;
+        }
+      }
+      
+      gridContainer.innerHTML = html;
+    }
+    
+    function renderGridItems() {
+      const gridContainer = document.getElementById('backpackGrid');
+      if (!gridContainer) return;
+      
+      const existingItems = gridContainer.querySelectorAll('.grid-item');
+      existingItems.forEach(item => item.remove());
+      
+      if (!inventory.gridItems || !Array.isArray(inventory.gridItems)) return;
+      
+      inventory.gridItems.forEach(gridItem => {
+        const item = gridItem.item;
+        const itemWidth = item.gridWidth || 1;
+        const itemHeight = item.gridHeight || 1;
+        const cellSize = 48;
+        const gap = 2;
+        
+        const pixelX = gridItem.col * (cellSize + gap);
+        const pixelY = gridItem.row * (cellSize + gap);
+        const pixelWidth = itemWidth * cellSize + (itemWidth - 1) * gap;
+        const pixelHeight = itemHeight * cellSize + (itemHeight - 1) * gap;
+        
+        const itemDiv = document.createElement('div');
+        itemDiv.className = `grid-item rarity-${item.rarity || 'common'}`;
+        itemDiv.style.left = `${pixelX}px`;
+        itemDiv.style.top = `${pixelY}px`;
+        itemDiv.style.width = `${pixelWidth}px`;
+        itemDiv.style.height = `${pixelHeight}px`;
+        itemDiv.dataset.itemId = gridItem.id;
+        
+        let contentHtml = `<div class="grid-item-content">`;
+        contentHtml += `<div class="grid-item-icon">${item.icon || '📦'}</div>`;
+        contentHtml += `<div class="grid-item-name">${item.name}</div>`;
+        
+        if (item.type === 'magazine' && item.currentAmmo !== undefined) {
+          contentHtml += `<div class="grid-item-ammo">${item.currentAmmo}/${item.capacity}</div>`;
+        } else if (item.type === 'ammoBox' && item.amount !== undefined) {
+          contentHtml += `<div class="grid-item-ammo">${item.amount}</div>`;
+        } else if (item.type === 'weapon' && item.mag !== undefined) {
+          contentHtml += `<div class="grid-item-ammo">${item.mag}/${item.magSize}</div>`;
+        }
+        
+        contentHtml += `</div>`;
+        itemDiv.innerHTML = contentHtml;
+        
+        gridContainer.appendChild(itemDiv);
+      });
+    }
+    
+    function renderEquipmentSlots() {
+      const slots = {
+        armor: { item: player.armor, icon: '🛡️', name: 'Empty' },
+        backpack: { item: inventory.backpack, icon: '🎒', name: 'Empty' },
+        primary: { item: inventory.primaryWeapon, icon: '🔫', name: 'Empty' },
+        secondary: { item: inventory.secondaryWeapon, icon: '🔫', name: 'Empty' },
+        melee: { item: inventory.meleeWeapon, icon: '🔪', name: 'Empty' },
+        vest: { item: inventory.vest, icon: '🦺', name: 'Empty' }
+      };
+      
+      Object.entries(slots).forEach(([slotName, slotData]) => {
+        const slotDiv = document.getElementById(`${slotName}Slot`);
+        if (!slotDiv) return;
+        
+        const item = slotData.item;
+        const isFilled = item !== null && item !== undefined;
+        
+        slotDiv.classList.toggle('filled', isFilled);
+        
+        const iconDiv = slotDiv.querySelector('.equipment-slot-item');
+        const nameDiv = slotDiv.querySelector('.equipment-slot-name');
+        
+        if (iconDiv) iconDiv.textContent = item?.icon || slotData.icon;
+        if (nameDiv) nameDiv.textContent = item?.name || slotData.name;
+      });
+    }
+    
+    function renderMagazineSlots() {
+      const container = document.getElementById('magSlotsContainer');
+      if (!container) return;
+      
+      const vest = inventory.vest || VESTS.starter;
+      const slotCount = vest.magazineSlots;
+      
+      if (!inventory.magazineSlots) inventory.magazineSlots = [];
+      
+      let html = '';
+      for (let i = 0; i < slotCount; i++) {
+        const mag = inventory.magazineSlots[i];
+        const isFilled = mag !== null && mag !== undefined;
+        
+        html += `<div class="mag-slot ${isFilled ? 'filled' : ''}" data-slot="${i}">`;
+        
+        if (isFilled) {
+          html += `<div class="mag-slot-icon">${mag.icon || '📋'}</div>`;
+          html += `<div class="mag-slot-ammo">${mag.currentAmmo}/${mag.capacity}</div>`;
+          html += `<div class="mag-slot-type">${mag.magType}</div>`;
+        } else {
+          html += `<div class="mag-slot-icon">📋</div>`;
+          html += `<div class="mag-slot-type">Empty</div>`;
+        }
+        
+        html += `</div>`;
+      }
+      
+      container.innerHTML = html;
+    }
+    
+    function renderCharacterCanvas() {
+      const canvas = document.getElementById('characterCanvas');
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.offsetWidth;
+      const h = canvas.height = canvas.offsetHeight;
+      
+      ctx.clearRect(0, 0, w, h);
+      
+      ctx.fillStyle = 'rgba(0, 255, 136, 0.1)';
+      ctx.fillRect(0, 0, w, h);
+      
+      ctx.strokeStyle = 'rgba(0, 255, 136, 0.4)';
+      ctx.lineWidth = 2;
+      
+      const cx = w / 2;
+      const cy = h / 2;
+      
+      ctx.beginPath();
+      ctx.arc(cx, cy - 60, 20, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 40);
+      ctx.lineTo(cx, cy + 20);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 20);
+      ctx.lineTo(cx - 30, cy + 10);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 20);
+      ctx.lineTo(cx + 30, cy + 10);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + 20);
+      ctx.lineTo(cx - 20, cy + 70);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + 20);
+      ctx.lineTo(cx + 20, cy + 70);
+      ctx.stroke();
+    }
+
+    // DRAG-AND-DROP SYSTEM
+    
+    let dragState = {
+      isDragging: false,
+      item: null,
+      itemId: null,
+      sourceType: null, // 'grid', 'equipment', 'magazine'
+      sourcePosition: null,
+      ghostElement: null,
+      mouseOffset: { x: 0, y: 0 }
+    };
+    
+    function setupDragAndDrop() {
+      const gridContainer = document.getElementById('backpackGrid');
+      if (!gridContainer) return;
+      
+      // Use event delegation for grid items
+      gridContainer.addEventListener('mousedown', handleGridItemMouseDown);
+      document.addEventListener('mousemove', handleDragMove);
+      document.addEventListener('mouseup', handleDragEnd);
+    }
+    
+    function handleGridItemMouseDown(e) {
+      const gridItem = e.target.closest('.grid-item');
+      if (!gridItem) return;
+      
+      e.preventDefault();
+      
+      const itemId = gridItem.dataset.itemId;
+      const gridItemData = inventory.gridItems.find(gi => gi.id === itemId);
+      if (!gridItemData) return;
+      
+      dragState.isDragging = true;
+      dragState.item = gridItemData.item;
+      dragState.itemId = itemId;
+      dragState.sourceType = 'grid';
+      dragState.sourcePosition = { row: gridItemData.row, col: gridItemData.col };
+      
+      const rect = gridItem.getBoundingClientRect();
+      dragState.mouseOffset = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+      
+      createGhostElement(gridItem, e.clientX, e.clientY);
+      gridItem.style.opacity = '0.3';
+    }
+    
+    function createGhostElement(sourceElement, mouseX, mouseY) {
+      const ghost = sourceElement.cloneNode(true);
+      ghost.id = 'dragGhost';
+      ghost.style.position = 'fixed';
+      ghost.style.pointerEvents = 'none';
+      ghost.style.zIndex = '1000';
+      ghost.style.opacity = '0.8';
+      ghost.style.left = `${mouseX - dragState.mouseOffset.x}px`;
+      ghost.style.top = `${mouseY - dragState.mouseOffset.y}px`;
+      ghost.classList.add('dragging');
+      
+      document.body.appendChild(ghost);
+      dragState.ghostElement = ghost;
+    }
+    
+    function handleDragMove(e) {
+      if (!dragState.isDragging || !dragState.ghostElement) return;
+      
+      dragState.ghostElement.style.left = `${e.clientX - dragState.mouseOffset.x}px`;
+      dragState.ghostElement.style.top = `${e.clientY - dragState.mouseOffset.y}px`;
+      
+      updateGridValidation(e.clientX, e.clientY);
+    }
+    
+    function updateGridValidation(mouseX, mouseY) {
+      const gridContainer = document.getElementById('backpackGrid');
+      if (!gridContainer) return;
+      
+      const gridRect = gridContainer.getBoundingClientRect();
+      
+      if (mouseX < gridRect.left || mouseX > gridRect.right ||
+          mouseY < gridRect.top || mouseY > gridRect.bottom) {
+        clearGridHighlights();
+        return;
+      }
+      
+      const relativeX = mouseX - gridRect.left;
+      const relativeY = mouseY - gridRect.top;
+      const gridPos = pixelToGrid(relativeX, relativeY);
+      
+      if (!gridPos) {
+        clearGridHighlights();
+        return;
+      }
+      
+      const gridSize = dragState.item.gridSize || { width: 1, height: 1 };
+      const canPlace = canPlaceItemAt(gridPos.col, gridPos.row, gridSize, dragState.itemId);
+      
+      highlightGridCells(gridPos.col, gridPos.row, itemWidth, itemHeight, canPlace);
+    }
+    
+    function highlightGridCells(col, row, width, height, isValid) {
+      clearGridHighlights();
+      
+      const backpack = inventory.backpack || BACKPACKS.starter;
+      
+      for (let r = row; r < row + height && r < backpack.rows; r++) {
+        for (let c = col; c < col + width && c < backpack.cols; c++) {
+          const cell = document.querySelector(`.grid-cell[data-row="${r}"][data-col="${c}"]`);
+          if (cell) {
+            cell.classList.add(isValid ? 'occupied' : 'invalid');
+          }
+        }
+      }
+    }
+    
+    function clearGridHighlights() {
+      document.querySelectorAll('.grid-cell.occupied, .grid-cell.invalid').forEach(cell => {
+        if (!inventory.backpackGrid[parseInt(cell.dataset.row)]?.[parseInt(cell.dataset.col)] ||
+            inventory.backpackGrid[parseInt(cell.dataset.row)][parseInt(cell.dataset.col)] === 'empty') {
+          cell.classList.remove('occupied', 'invalid');
+        }
+      });
+    }
+    
+    function handleDragEnd(e) {
+      if (!dragState.isDragging) return;
+      
+      const gridContainer = document.getElementById('backpackGrid');
+      if (!gridContainer) {
+        cancelDrag();
+        return;
+      }
+      
+      const gridRect = gridContainer.getBoundingClientRect();
+      
+      if (e.clientX < gridRect.left || e.clientX > gridRect.right ||
+          e.clientY < gridRect.top || e.clientY > gridRect.bottom) {
+        cancelDrag();
+        return;
+      }
+      
+      const relativeX = e.clientX - gridRect.left;
+      const relativeY = e.clientY - gridRect.top;
+      const gridPos = pixelToGrid(relativeX, relativeY);
+      
+      if (!gridPos) {
+        cancelDrag();
+        return;
+      }
+      
+      const gridSize = dragState.item.gridSize || { width: 1, height: 1 };
+      const canPlace = canPlaceItemAt(gridPos.col, gridPos.row, gridSize, dragState.itemId);
+      
+      if (canPlace) {
+        if (dragState.sourceType === 'grid') {
+          removeItemFromGrid(dragState.itemId);
+        }
+        placeItemInGrid(dragState.item, gridPos.col, gridPos.row, dragState.itemId);
+        showNotification(`✅ Moved ${dragState.item.name}`);
+      } else {
+        showNotification('❌ Cannot place item there');
+      }
+      
+      finishDrag();
+    }
+    
+    function cancelDrag() {
+      const originalItem = document.querySelector(`.grid-item[data-item-id="${dragState.itemId}"]`);
+      if (originalItem) {
+        originalItem.style.opacity = '1';
+      }
+      finishDrag();
+    }
+    
+    function finishDrag() {
+      if (dragState.ghostElement) {
+        dragState.ghostElement.remove();
+      }
+      
+      clearGridHighlights();
+      
+      dragState = {
+        isDragging: false,
+        item: null,
+        itemId: null,
+        sourceType: null,
+        sourcePosition: null,
+        ghostElement: null,
+        mouseOffset: { x: 0, y: 0 }
+      };
+      
+      renderTarkovInventory();
+    }
+
+
+// DROP MODE TOGGLE
+let dropModeActive = false;
+
+function toggleDropMode() {
+  dropModeActive = !dropModeActive;
+  const btn = document.getElementById('dropModeBtn');
+  if (btn) {
+    btn.classList.toggle('active', dropModeActive);
+    btn.textContent = dropModeActive ? 'DROP MODE ON' : 'DROP MODE';
+  }
+  showNotification(dropModeActive ? '⚠️ Drop mode enabled - click items to drop' : 'Drop mode disabled');
+}
+
+// EQUIPMENT SLOT HANDLERS
+function setupEquipmentSlots() {
+  const slots = ['armor', 'backpack', 'primary', 'secondary', 'melee', 'vest'];
+  slots.forEach(slotName => {
+    const slotEl = document.getElementById(`${slotName}Slot`);
+    if (slotEl) {
+      slotEl.addEventListener('click', () => handleEquipmentSlotClick(slotName));
+    }
+  });
+}
+
+function handleEquipmentSlotClick(slotName) {
+  if (dropModeActive) {
+    let item = null;
+    if (slotName === 'armor') item = player.armor;
+    else if (slotName === 'backpack') item = inventory.backpack;
+    else if (slotName === 'primary') item = inventory.primaryWeapon;
+    else if (slotName === 'secondary') item = inventory.secondaryWeapon;
+    else if (slotName === 'melee') item = inventory.meleeWeapon;
+    else if (slotName === 'vest') item = inventory.vest;
+    
+    if (item) {
+      dropItemInWorld(item, slotName);
+    } else {
+      showNotification('❌ No item equipped in this slot');
+    }
+    return;
+  }
+  
+  showNotification(`Click items in backpack to equip to ${slotName.toUpperCase()}`);
+}
+
+// DROP ITEM IN WORLD  
+function dropItemInWorld(item, sourceType) {
+  const dropOffset = 60;
+  const angle = Math.random() * Math.PI * 2;
+  
+  lootBoxes.push({
+    x: player.x + Math.cos(angle) * dropOffset,
+    y: player.y + Math.sin(angle) * dropOffset,
+    size: 20,
+    opened: false,
+    building: null,
+    pulsePhase: 0,
+    droppedItem: item
+  });
+  
+  if (sourceType === 'armor') {
+    player.armor = null;
+  } else if (sourceType === 'backpack') {
+    inventory.backpack = BACKPACKS.starter;
+    initializeBackpackGrid();
+  } else if (sourceType === 'primary') {
+    inventory.primaryWeapon = null;
+    inventory.slot1 = null;
+    if (inventory.currentSlot === 1) {
+      inventory.currentSlot = 2;
+      currentWeapon = inventory.slot2 || inventory.slot3;
+    }
+  } else if (sourceType === 'secondary') {
+    inventory.secondaryWeapon = null;
+    inventory.slot2 = null;
+    if (inventory.currentSlot === 2) {
+      inventory.currentSlot = 3;
+      currentWeapon = inventory.slot3;
+    }
+  } else if (sourceType === 'melee') {
+    inventory.meleeWeapon = null;
+    inventory.slot3 = null;
+    if (inventory.currentSlot === 3) {
+      inventory.currentSlot = 2;
+      currentWeapon = inventory.slot2;
+    }
+  } else if (sourceType === 'vest') {
+    inventory.vest = VESTS.starter;
+    initializeMagazineSlots();
+  }
+  
+  showNotification(`📦 Dropped ${item.name}`);
+  renderTarkovInventory();
+}
+
+// MAGAZINE AND AMMO MECHANICS
+function setupMagazineSlots() {
+  const container = document.getElementById('magSlotsContainer');
+  if (!container) return;
+  
+  container.addEventListener('click', (e) => {
+    const slot = e.target.closest('.mag-slot');
+    if (!slot) return;
+    
+    const slotIndex = parseInt(slot.dataset.slot);
+    handleMagazineSlotClick(slotIndex);
+  });
+}
+
+function handleMagazineSlotClick(slotIndex) {
+  if (dropModeActive) {
+    const mag = inventory.magazineSlots[slotIndex];
+    if (mag) {
+      dropMagazineInWorld(mag, slotIndex);
+    }
+    return;
+  }
+  
+  if (!currentWeapon || currentWeapon.weaponType === 'melee') {
+    showNotification('❌ No weapon equipped that uses magazines');
+    return;
+  }
+  
+  const mag = inventory.magazineSlots[slotIndex];
+  if (!mag) {
+    showNotification('❌ Empty magazine slot');
+    return;
+  }
+  
+  const weaponAmmoType = getWeaponAmmoType(currentWeapon);
+  if (mag.ammoType !== weaponAmmoType) {
+    showNotification(`❌ Wrong magazine type! Weapon uses ${weaponAmmoType}`);
+    return;
+  }
+  
+  const currentMag = {
+    id: 'magazine_' + Date.now(),
+    name: currentWeapon.weaponType.charAt(0).toUpperCase() + currentWeapon.weaponType.slice(1) + ' Magazine',
+    icon: '📋',
+    type: 'magazine',
+    magType: weaponAmmoType,
+    ammoType: weaponAmmoType,
+    capacity: currentWeapon.magSize,
+    currentAmmo: currentWeapon.mag,
+    gridWidth: 1,
+    gridHeight: 2,
+    rarity: 'common'
+  };
+  
+  currentWeapon.mag = mag.currentAmmo;
+  inventory.magazineSlots[slotIndex] = currentMag;
+  
+  showNotification(`🔄 Swapped magazine (${mag.currentAmmo} rounds)`);
+  renderTarkovInventory();
+}
+
+function dropMagazineInWorld(mag, slotIndex) {
+  const dropOffset = 60;
+  const angle = Math.random() * Math.PI * 2;
+  
+  lootBoxes.push({
+    x: player.x + Math.cos(angle) * dropOffset,
+    y: player.y + Math.sin(angle) * dropOffset,
+    size: 20,
+    opened: false,
+    building: null,
+    pulsePhase: 0,
+    droppedItem: mag
+  });
+  
+  inventory.magazineSlots[slotIndex] = null;
+  showNotification(`📦 Dropped ${mag.name}`);
+  renderTarkovInventory();
+}
+
+function getWeaponAmmoType(weapon) {
+  if (weapon.weaponType === 'pistol') return 'pistol';
+  if (weapon.weaponType === 'rifle') return 'rifle';
+  if (weapon.weaponType === 'shotgun') return 'shotgun';
+  if (weapon.weaponType === 'sniper') return 'sniper';
+  return 'pistol';
+}
+
+// GRID ITEM CLICK HANDLER
+function setupGridItemHandlers() {
+  const gridContainer = document.getElementById('backpackGrid');
+  if (!gridContainer) return;
+  
+  gridContainer.addEventListener('click', (e) => {
+    if (dragState.isDragging) return;
+    
+    const gridItem = e.target.closest('.grid-item');
+    if (!gridItem) return;
+    
+    const itemId = gridItem.dataset.itemId;
+    const gridItemData = inventory.gridItems.find(gi => gi.id === itemId);
+    if (!gridItemData) return;
+    
+    handleGridItemClick(gridItemData);
+  });
+}
+
+function handleGridItemClick(gridItemData) {
+  const item = gridItemData.item;
+  
+  if (dropModeActive) {
+    dropGridItemInWorld(gridItemData);
+    return;
+  }
+  
+  if (item.type === 'ammoBox') {
+    fillMagazineWithAmmo(item, gridItemData.id);
+    return;
+  }
+  
+  if (item.type === 'weapon') {
+    equipWeaponFromGrid(item, gridItemData.id);
+    return;
+  }
+  
+  if (item.type === 'magazine') {
+    addMagazineToVestFromGrid(item, gridItemData.id);
+    return;
+  }
+  
+  if (item.type === 'backpack') {
+    equipBackpackFromGrid(item, gridItemData.id);
+    return;
+  }
+  
+  if (item.type === 'vest') {
+    equipVestFromGrid(item, gridItemData.id);
+    return;
+  }
+}
+
+function dropGridItemInWorld(gridItemData) {
+  const item = gridItemData.item;
+  const dropOffset = 60;
+  const angle = Math.random() * Math.PI * 2;
+  
+  lootBoxes.push({
+    x: player.x + Math.cos(angle) * dropOffset,
+    y: player.y + Math.sin(angle) * dropOffset,
+    size: 20,
+    opened: false,
+    building: null,
+    pulsePhase: 0,
+    droppedItem: item
+  });
+  
+  removeItemFromGrid(gridItemData.id);
+  showNotification(`📦 Dropped ${item.name}`);
+  renderTarkovInventory();
+}
+
+function fillMagazineWithAmmo(ammoBox, gridItemId) {
+  const emptySlotIndex = inventory.magazineSlots.findIndex(m => m === null);
+  if (emptySlotIndex === -1) {
+    showNotification('❌ No empty magazine slots in vest');
+    return;
+  }
+  
+  const magType = ammoBox.ammoType;
+  let capacity = 15;
+  if (magType === 'pistol') capacity = 15;
+  else if (magType === 'rifle') capacity = 30;
+  else if (magType === 'sniper') capacity = 5;
+  else if (magType === 'shotgun') capacity = 8;
+  
+  const magazine = {
+    id: 'magazine_' + Date.now(),
+    name: magType.charAt(0).toUpperCase() + magType.slice(1) + ' Magazine',
+    icon: '📋',
+    type: 'magazine',
+    magType: magType,
+    ammoType: magType,
+    capacity: capacity,
+    currentAmmo: Math.min(ammoBox.amount, capacity),
+    gridWidth: 1,
+    gridHeight: 2,
+    rarity: 'common'
+  };
+  
+  inventory.magazineSlots[emptySlotIndex] = magazine;
+  
+  ammoBox.amount -= magazine.currentAmmo;
+  if (ammoBox.amount <= 0) {
+    removeItemFromGrid(gridItemId);
+  }
+  
+  showNotification(`✅ Filled ${magazine.name} with ${magazine.currentAmmo} rounds`);
+  renderTarkovInventory();
+}
+
+function equipWeaponFromGrid(weapon, gridItemId) {
+  const slotType = weapon.type;
+  
+  let targetSlot = null;
+  let currentEquipped = null;
+  
+  if (slotType === 'primary') {
+    targetSlot = 'primary';
+    currentEquipped = inventory.primaryWeapon;
+    inventory.primaryWeapon = weapon;
+    inventory.slot1 = weapon;
+    inventory.currentSlot = 1;
+    currentWeapon = weapon;
+  } else if (slotType === 'secondary') {
+    targetSlot = 'secondary';
+    currentEquipped = inventory.secondaryWeapon;
+    inventory.secondaryWeapon = weapon;
+    inventory.slot2 = weapon;
+    inventory.currentSlot = 2;
+    currentWeapon = weapon;
+  } else if (slotType === 'melee') {
+    targetSlot = 'melee';
+    currentEquipped = inventory.meleeWeapon;
+    inventory.meleeWeapon = weapon;
+    inventory.slot3 = weapon;
+  }
+  
+  removeItemFromGrid(gridItemId);
+  
+  if (currentEquipped) {
+    const pos = findEmptyPositionForItem(currentEquipped);
+    if (pos) {
+      placeItemInGrid(currentEquipped, pos.row, pos.col);
+    }
+  }
+  
+  showNotification(`✅ Equipped ${weapon.name}`);
+  renderTarkovInventory();
+}
+
+function addMagazineToVestFromGrid(magazine, gridItemId) {
+  const emptySlot = findEmptyMagazineSlot();
+  if (emptySlot === -1) {
+    showNotification('❌ No empty magazine slots');
+    return;
+  }
+  
+  inventory.magazineSlots[emptySlot] = magazine;
+  removeItemFromGrid(gridItemId);
+  
+  showNotification(`✅ Added ${magazine.name} to vest`);
+  renderTarkovInventory();
+}
+
+function equipBackpackFromGrid(backpack, gridItemId) {
+  const oldBackpack = inventory.backpack;
+  
+  if (oldBackpack && inventory.gridItems.length > 0) {
+    showNotification('❌ Empty backpack before swapping');
+    return;
+  }
+  
+  inventory.backpack = backpack;
+  removeItemFromGrid(gridItemId);
+  initializeBackpackGrid();
+  
+  if (oldBackpack && oldBackpack.id !== 'starter') {
+    const pos = findEmptyPositionForItem(oldBackpack);
+    if (pos) {
+      placeItemInGrid(oldBackpack, pos.row, pos.col);
+    }
+  }
+  
+  showNotification(`✅ Equipped ${backpack.name}`);
+  renderTarkovInventory();
+}
+
+function equipVestFromGrid(vest, gridItemId) {
+  const oldVest = inventory.vest;
+  
+  const hasMags = inventory.magazineSlots.some(m => m !== null);
+  if (oldVest && hasMags) {
+    showNotification('❌ Remove magazines from vest before swapping');
+    return;
+  }
+  
+  inventory.vest = vest;
+  removeItemFromGrid(gridItemId);
+  initializeMagazineSlots();
+  
+  if (oldVest && oldVest.id !== 'starter') {
+    const pos = findEmptyPositionForItem(oldVest);
+    if (pos) {
+      placeItemInGrid(oldVest, pos.row, pos.col);
+    }
+  }
+  
+  showNotification(`✅ Equipped ${vest.name}`);
+  renderTarkovInventory();
+}
+
+// ITEM TOOLTIPS
+let currentTooltip = null;
+
+function setupTooltips() {
+  document.addEventListener('mouseover', (e) => {
+    const gridItem = e.target.closest('.grid-item');
+    const equipSlot = e.target.closest('.equipment-slot');
+    const magSlot = e.target.closest('.mag-slot');
+    
+    if (gridItem) {
+      const itemId = gridItem.dataset.itemId;
+      const gridItemData = inventory.gridItems.find(gi => gi.id === itemId);
+      if (gridItemData) {
+        showTooltip(gridItemData.item, e.clientX, e.clientY);
+      }
+    } else if (equipSlot) {
+      const slotType = equipSlot.dataset.slot;
+      let item = null;
+      if (slotType === 'armor') item = player.armor;
+      else if (slotType === 'backpack') item = inventory.backpack;
+      else if (slotType === 'primary') item = inventory.primaryWeapon;
+      else if (slotType === 'secondary') item = inventory.secondaryWeapon;
+      else if (slotType === 'melee') item = inventory.meleeWeapon;
+      else if (slotType === 'vest') item = inventory.vest;
+      
+      if (item) {
+        showTooltip(item, e.clientX, e.clientY);
+      }
+    } else if (magSlot) {
+      const slotIndex = parseInt(magSlot.dataset.slot);
+      const mag = inventory.magazineSlots[slotIndex];
+      if (mag) {
+        showTooltip(mag, e.clientX, e.clientY);
+      }
+    } else {
+      hideTooltip();
+    }
+  });
+  
+  document.addEventListener('mouseout', (e) => {
+    if (!e.relatedTarget || (!e.relatedTarget.closest('.grid-item') && 
+        !e.relatedTarget.closest('.equipment-slot') && 
+        !e.relatedTarget.closest('.mag-slot'))) {
+      hideTooltip();
+    }
+  });
+}
+
+function showTooltip(item, x, y) {
+  hideTooltip();
+  
+  const tooltip = document.createElement('div');
+  tooltip.className = 'item-tooltip';
+  tooltip.style.left = (x + 15) + 'px';
+  tooltip.style.top = (y + 15) + 'px';
+  
+  let html = `<div class="tooltip-title">${item.icon || '📦'} ${item.name}</div>`;
+  
+  if (item.type === 'weapon') {
+    html += `<div class="tooltip-stat"><span>Damage:</span><span>${item.damage}</span></div>`;
+    html += `<div class="tooltip-stat"><span>Range:</span><span>${item.aimRange}</span></div>`;
+    html += `<div class="tooltip-stat"><span>Magazine:</span><span>${item.magSize}</span></div>`;
+    html += `<div class="tooltip-stat"><span>Fire Rate:</span><span>${Math.round(1000/item.cooldown)}/s</span></div>`;
+  } else if (item.type === 'magazine') {
+    html += `<div class="tooltip-stat"><span>Ammo:</span><span>${item.currentAmmo}/${item.capacity}</span></div>`;
+    html += `<div class="tooltip-stat"><span>Type:</span><span>${item.ammoType}</span></div>`;
+  } else if (item.type === 'ammoBox') {
+    html += `<div class="tooltip-stat"><span>Amount:</span><span>${item.amount} rounds</span></div>`;
+    html += `<div class="tooltip-stat"><span>Type:</span><span>${item.ammoType}</span></div>`;
+  } else if (item.type === 'backpack') {
+    html += `<div class="tooltip-stat"><span>Size:</span><span>${item.cols}x${item.rows}</span></div>`;
+    html += `<div class="tooltip-stat"><span>Capacity:</span><span>${item.cols * item.rows} cells</span></div>`;
+  } else if (item.type === 'vest') {
+    html += `<div class="tooltip-stat"><span>Mag Slots:</span><span>${item.magSlots}</span></div>`;
+  } else if (item.protection !== undefined) {
+    html += `<div class="tooltip-stat"><span>Protection:</span><span>${item.protection}%</span></div>`;
+    html += `<div class="tooltip-stat"><span>Durability:</span><span>${item.durability}/${item.maxDurability}</span></div>`;
+  }
+  
+  if (item.description) {
+    html += `<div class="tooltip-desc">${item.description}</div>`;
+  }
+  
+  tooltip.innerHTML = html;
+  document.body.appendChild(tooltip);
+  currentTooltip = tooltip;
+}
+
+function hideTooltip() {
+  if (currentTooltip) {
+    currentTooltip.remove();
+    currentTooltip = null;
+  }
+}
+
+// STARTING LOADOUT
+function setupStartingLoadout() {
+  inventory.backpack = BACKPACKS.starter;
+  initializeBackpackGrid();
+  
+  inventory.vest = VESTS.starter;
+  initializeMagazineSlots();
+  
+  const knife = JSON.parse(JSON.stringify(WEAPONS.knife));
+  inventory.meleeWeapon = knife;
+  inventory.slot3 = knife;
+  
+  const pistol = JSON.parse(JSON.stringify(WEAPONS.pistol));
+  pistol.mag = pistol.magSize;
+  pistol.reserve = 0;
+  inventory.secondaryWeapon = pistol;
+  inventory.slot2 = pistol;
+  
+  for (let i = 0; i < 3; i++) {
+    inventory.magazineSlots[i] = {
+      id: 'magazine_start_' + i,
+      name: 'Pistol Magazine',
+      icon: '📋',
+      type: 'magazine',
+      magType: 'pistol',
+      ammoType: 'pistol',
+      capacity: 15,
+      currentAmmo: 15,
+      gridWidth: 1,
+      gridHeight: 2,
+      rarity: 'common'
+    };
+  }
+  
+  inventory.currentSlot = 2;
+  currentWeapon = pistol;
+}
+    function toggleMinimap() {
+      minimapExpanded = !minimapExpanded;
+      const minimap = document.getElementById('minimap');
+      if (minimapExpanded) {
+        minimap.style.width = '400px';
+        minimap.style.height = '400px';
+        minimapCanvas.width = 400;
+        minimapCanvas.height = 400;
+      } else {
+        minimap.style.width = '220px';
+        minimap.style.height = '220px';
+        minimapCanvas.width = 220;
+        minimapCanvas.height = 220;
+      }
+    }
+
+    function showNotification(text) {
+      const notif = document.getElementById('notification');
+      notif.textContent = text;
+      notif.classList.remove('active');
+      void notif.offsetWidth;
+      notif.classList.add('active');
+      setTimeout(() => notif.classList.remove('active'), 2000);
+    }
+
+    function triggerGameOver() {
+      gameOver = true;
+      document.getElementById('gameOverStats').innerHTML = `
+        You survived ${day} days<br>
+        Killed ${kills} zombies<br>
+        Earned $${currency}
+      `;
+      document.getElementById('gameOver').classList.add('active');
+    }
+
+    function restartGame() {
+      location.reload();
+    }
+
+    // Event listeners
+    window.addEventListener('keydown', e => {
+      keys[e.key.toLowerCase()] = true;
+      
+      if (e.key === '1') {
+        if (inventory.slot1) {
+          inventory.currentSlot = 1;
+          currentWeapon = inventory.slot1;
+        }
+      } else if (e.key === '2') {
+        if (inventory.slot2) {
+          inventory.currentSlot = 2;
+          currentWeapon = inventory.slot2;
+        }
+      } else if (e.key === '3') {
+        if (inventory.slot3) {
+          inventory.currentSlot = 3;
+          currentWeapon = inventory.slot3;
+        }
+      } else if (e.key.toLowerCase() === 'r') {
+        startReload(currentWeapon);
+      } else if (e.key.toLowerCase() === 'b') {
+        toggleShop();
+      } else if (e.key.toLowerCase() === 'i') {
+        toggleInventory();
+      } else if (e.key.toLowerCase() === 'm') {
+        toggleMinimap();
+      } else if (e.key.toLowerCase() === 'e') {
+        if (nearestLootBox) {
+          openLootBox(nearestLootBox);
+        }
+      } else if (e.key.toLowerCase() === 'f') {
+        flashlightOn = !flashlightOn;
+      } else if (e.key === 'Enter' && gameOver) {
+        restartGame();
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    canvas.addEventListener('mousedown', e => {
+      if (e.button === 0) {
+        mouse.leftDown = true;
+        tryShoot();
+      } else if (e.button === 2) {
+        mouse.rightDown = true;
+      }
+    });
+
+    canvas.addEventListener('mouseup', e => {
+      if (e.button === 0) mouse.leftDown = false;
+      else if (e.button === 2) mouse.rightDown = false;
+    });
+
+    canvas.addEventListener('mousemove', e => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    window.addEventListener('resize', () => {
+      W = canvas.width = innerWidth;
+      H = canvas.height = innerHeight;
+    });
+
+    // Game loop
+    function loop() {
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+      
+      update(dt);
+      draw();
+      
+      requestAnimationFrame(loop);
+    }
+
+    // Initialize game
+    generateTerrain();
+    generateBuildings();
+    generateDecorations();
+    spawnInitialZombies(); // NEW: Spawn initial zombies on streets
+    
+    // Initialize Tarkov inventory system
+    initializeBackpackGrid();
+    initializeMagazineSlots();
+    setupStartingLoadout();
+    setupDragAndDrop();
+    setupEquipmentSlots();
+    setupMagazineSlots();
+    setupGridItemHandlers();
+    setupTooltips();
+    
+    updateHUD();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
