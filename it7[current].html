@@ -3672,6 +3672,11 @@
       const item = dragState.item;
       const slotType = equipSlot.dataset.slot;
       
+      // Only show feedback for items dragged from grid (backpack)
+      if (dragState.sourceType !== 'grid') {
+        return;
+      }
+      
       // Only handle weapon drops on weapon slots
       if (item.type === 'weapon') {
         const weaponSlot = item.slot;
