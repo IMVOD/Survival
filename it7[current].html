@@ -3677,21 +3677,34 @@
         return;
       }
       
-      // Only handle weapon drops on weapon slots
+      let isValid = false;
+      
+      // Handle weapon drops on weapon slots
       if (item.type === 'weapon') {
         const weaponSlot = item.slot;
         if ((slotType === 'primary' && weaponSlot === 1) || 
             (slotType === 'secondary' && weaponSlot === 2) || 
             (slotType === 'melee' && weaponSlot === 3)) {
-          equipSlot.classList.add('valid-drop');
-        } else {
-          equipSlot.classList.add('invalid-drop');
+          isValid = true;
         }
+      }
+      // Handle armor drops on armor slot
+      else if (item.type === 'armor' && slotType === 'armor') {
+        isValid = true;
+      }
+      // Handle vest drops on vest slot (vests can also go in armor slot for compatibility)
+      else if (item.type === 'vest' && (slotType === 'vest' || slotType === 'armor')) {
+        isValid = true;
+      }
+      // Handle backpack drops on backpack slot
+      else if (item.type === 'backpack' && slotType === 'backpack') {
+        isValid = true;
+      }
+      
+      if (isValid) {
+        equipSlot.classList.add('valid-drop');
       } else {
-        // Non-weapon items on weapon slots are invalid
-        if (slotType === 'primary' || slotType === 'secondary' || slotType === 'melee') {
-          equipSlot.classList.add('invalid-drop');
-        }
+        equipSlot.classList.add('invalid-drop');
       }
     }
     
@@ -3840,6 +3853,13 @@
             cancelDrag();
             return;
           }
+        }
+        
+        // Handle armor drops on armor slot
+        if (item.type === 'armor' && slotType === 'armor') {
+          equipArmorFromGrid(item, dragState.itemId);
+          finishDrag();
+          return;
         }
         
         // Handle vest drops on vest slot or armor slot (vests provide protection)
@@ -4327,6 +4347,11 @@ function handleGridItemClick(gridItemData) {
     equipVestFromGrid(item, gridItemData.id);
     return;
   }
+  
+  if (item.type === 'armor') {
+    equipArmorFromGrid(item, gridItemData.id);
+    return;
+  }
 }
 
 function dropGridItemInWorld(gridItemData) {
@@ -4546,6 +4571,47 @@ function equipVestFromGrid(vest, gridItemId) {
   }
   
   showNotification(`✅ Equipped ${vest.name} (${vest.magSlots} magazine slots)`);
+  renderTarkovInventory();
+}
+
+// Equip armor from backpack
+// Swaps with currently equipped armor if any
+function equipArmorFromGrid(armor, gridItemId) {
+  const oldArmor = player.armor;
+  
+  // Equip new armor
+  player.armor = armor;
+  removeItemFromGrid(gridItemId);
+  
+  // Return old armor to backpack if exists
+  if (oldArmor) {
+    // Ensure old armor has proper grid properties
+    if (!oldArmor.gridWidth) oldArmor.gridWidth = 2;
+    if (!oldArmor.gridHeight) oldArmor.gridHeight = 2;
+    if (!oldArmor.icon) oldArmor.icon = '🛡️';
+    if (!oldArmor.type) oldArmor.type = 'armor';
+    
+    const pos = findEmptyPositionForItem(oldArmor);
+    if (pos) {
+      placeItemInGrid(oldArmor, pos.col, pos.row);
+    } else {
+      showNotification('⚠️ Backpack full, old armor dropped on ground');
+      // Drop the old armor in the world if backpack is full
+      const dropOffset = 60;
+      const angle = Math.random() * Math.PI * 2;
+      lootBoxes.push({
+        x: player.x + Math.cos(angle) * dropOffset,
+        y: player.y + Math.sin(angle) * dropOffset,
+        size: 20,
+        opened: false,
+        building: null,
+        pulsePhase: 0,
+        droppedItem: oldArmor
+      });
+    }
+  }
+  
+  showNotification(`✅ Equipped ${armor.name} (${armor.protection}% protection)`);
   renderTarkovInventory();
 }
 
