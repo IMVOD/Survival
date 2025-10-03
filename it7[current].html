@@ -748,6 +748,7 @@
     const DAY_LENGTH = 120;
     const TILE_SIZE = 16;
     const LOOT_BOX_INTERACT_RANGE = 50;
+    const CENTER_PROXIMITY_THRESHOLD = 800; // Distance from center for zombies to switch to wander
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -1746,13 +1747,15 @@
           x, y, radius: 10 + Math.random() * 5,
           health: 40 + day * 10, maxHealth: 40 + day * 10,
           speed: 30 + day * 3, wanderAngle: Math.random() * Math.PI * 2,
-          wanderTimer: 0, state: 'wander',
-          // bias their wandering target toward the middle of the map
-          targetX: WORLD_SIZE/2 + (Math.random()-0.5) * WORLD_SIZE * 0.25,
-          targetY: WORLD_SIZE/2 + (Math.random()-0.5) * WORLD_SIZE * 0.25,
+          wanderTimer: 0, state: 'moveToCenter',
+          // Set target to city center for initial movement
+          targetX: WORLD_SIZE/2,
+          targetY: WORLD_SIZE/2,
           animOffset: Math.random() * Math.PI * 2,
           // Mark as outdoor zombie (no building property)
-          isOutdoor: true
+          isOutdoor: true,
+          // Mark as wave-spawned zombie for special AI behavior
+          isWaveZombie: true
         });
       }
     }
@@ -1775,8 +1778,26 @@
       z.y = Math.max(z.radius, Math.min(WORLD_SIZE - z.radius, z.y));
 
       const dist = Math.hypot(z.x - player.x, z.y - player.y);
+      const centerDist = Math.hypot(z.x - WORLD_SIZE/2, z.y - WORLD_SIZE/2);
 
-      if (dist < ZOMBIE_DETECT_RANGE) {
+      // Wave zombies in moveToCenter state: check if close to center
+      if (z.isWaveZombie && z.state === 'moveToCenter' && centerDist < CENTER_PROXIMITY_THRESHOLD) {
+        // Switch to wander mode once near city center
+        z.state = 'wander';
+        z.wanderTimer = 0;
+        z.wanderAngle = Math.random() * Math.PI * 2;
+      }
+
+      // Wave zombies in chase state: check if close to center (lost aggro area)
+      if (z.isWaveZombie && z.state === 'chase' && centerDist < CENTER_PROXIMITY_THRESHOLD) {
+        // Switch to wander mode once near city center, even when chasing
+        z.state = 'wander';
+        z.wanderTimer = 0;
+        z.wanderAngle = Math.random() * Math.PI * 2;
+      }
+
+      // Player detection: moveToCenter or wander → chase
+      if (dist < ZOMBIE_DETECT_RANGE && (z.state === 'moveToCenter' || z.state === 'wander')) {
         z.state = 'chase';
         z.targetX = player.x;
         z.targetY = player.y;
@@ -1814,6 +1835,23 @@
           }
           damagePlayer(12); // Damage per attack (not per frame)
           z.lastAttack = now;
+        }
+      } else if (z.state === 'moveToCenter') {
+        // Wave zombies move toward the city center
+        const dx = z.targetX - z.x;
+        const dy = z.targetY - z.y;
+        const distToCenter = Math.hypot(dx, dy);
+        if (distToCenter > 5) {
+          const collision = checkBuildingCollision(z.x + (dx/distToCenter) * z.speed * dt, z.y + (dy/distToCenter) * z.speed * dt, z.radius);
+          if (!collision) {
+            z.x += (dx / distToCenter) * z.speed * dt * 0.5;
+            z.y += (dy / distToCenter) * z.speed * dt * 0.5;
+          } else {
+            // When hitting a building, try to navigate around it
+            z.wanderAngle += (Math.random() - 0.5) * 2;
+            z.x += Math.cos(z.wanderAngle) * z.speed * dt * 0.35;
+            z.y += Math.sin(z.wanderAngle) * z.speed * dt * 0.35;
+          }
         }
       } else if (z.state === 'wander') {
         z.wanderTimer -= dt;
