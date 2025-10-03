@@ -3473,8 +3473,8 @@
         magContainer.addEventListener('mousedown', handleMagazineSlotMouseDown);
       }
       
-      // Add drag support for equipment slots (weapon slots)
-      const equipmentSlots = ['primarySlot', 'secondarySlot', 'meleeSlot'];
+      // Add drag support for ALL equipment slots (weapons, armor, vest, backpack)
+      const equipmentSlots = ['primarySlot', 'secondarySlot', 'meleeSlot', 'armorSlot', 'vestSlot', 'backpackSlot'];
       equipmentSlots.forEach(slotId => {
         const slotEl = document.getElementById(slotId);
         if (slotEl) {
@@ -3552,29 +3552,58 @@
       // Don't create ghost element yet - wait for mouse movement
     }
     
-    // Handle dragging weapons from equipment slots
+    // Handle dragging items from equipment slots
     function handleEquipmentSlotMouseDown(e) {
       const equipSlot = e.target.closest('.equipment-slot');
       if (!equipSlot) return;
       
       const slotType = equipSlot.dataset.slot;
-      let weapon = null;
+      let item = null;
       let slotName = null;
       
-      // Get the weapon from the appropriate slot
+      // Get the item from the appropriate slot
       if (slotType === 'primary') {
-        weapon = inventory.primaryWeapon;
+        item = inventory.primaryWeapon;
         slotName = 'primary';
       } else if (slotType === 'secondary') {
-        weapon = inventory.secondaryWeapon;
+        item = inventory.secondaryWeapon;
         slotName = 'secondary';
       } else if (slotType === 'melee') {
-        weapon = inventory.meleeWeapon;
+        item = inventory.meleeWeapon;
         slotName = 'melee';
+      } else if (slotType === 'armor') {
+        item = player.armor;
+        slotName = 'armor';
+      } else if (slotType === 'vest') {
+        item = inventory.vest;
+        slotName = 'vest';
+      } else if (slotType === 'backpack') {
+        item = inventory.backpack;
+        slotName = 'backpack';
       }
       
-      // Can only drag if there's a weapon in the slot
-      if (!weapon) return;
+      // Can only drag if there's an item in the slot
+      if (!item) return;
+      
+      // Don't allow dragging starter backpack or vest
+      if ((slotType === 'backpack' && item.id === 'starter') || (slotType === 'vest' && item.id === 'starter')) {
+        return;
+      }
+      
+      // Don't allow dragging vest if it has magazines
+      if (slotType === 'vest') {
+        const hasMags = inventory.magazineSlots.some(m => m !== null);
+        if (hasMags) {
+          showNotification('❌ Remove magazines from vest before unequipping');
+          return;
+        }
+      }
+      
+      // Don't allow dragging backpack if it has items
+      if (slotType === 'backpack' && inventory.gridItems.length > 0) {
+        showNotification('❌ Empty backpack before unequipping');
+        return;
+      }
       
       e.preventDefault();
       e.stopPropagation(); // Prevent click handler from firing
@@ -3582,8 +3611,8 @@
       // Store initial state but don't start dragging yet
       dragState.isDragging = true; // Set to true to prevent click handler from firing during drag
       dragState.dragStarted = false; // But mark that we haven't actually started dragging
-      dragState.item = weapon;
-      dragState.itemId = weapon.id;
+      dragState.item = item;
+      dragState.itemId = item.id;
       dragState.sourceType = 'equipment';
       dragState.sourcePosition = slotName;
       dragState.mouseDownPos = { x: e.clientX, y: e.clientY };
@@ -3836,7 +3865,7 @@
       
       // Check if dropped on an equipment slot
       const equipSlot = document.elementFromPoint(e.clientX, e.clientY)?.closest('.equipment-slot');
-      if (equipSlot && dragState.sourceType === 'grid') {
+      if (equipSlot) {
         const slotType = equipSlot.dataset.slot;
         
         // Handle weapon drops
@@ -3845,7 +3874,13 @@
           if ((slotType === 'primary' && weaponSlot === 1) || 
               (slotType === 'secondary' && weaponSlot === 2) || 
               (slotType === 'melee' && weaponSlot === 3)) {
-            equipWeaponFromGrid(item, dragState.itemId);
+            // Valid weapon for this slot - equip it
+            if (dragState.sourceType === 'grid') {
+              equipWeaponFromGrid(item, dragState.itemId);
+            } else if (dragState.sourceType === 'equipment') {
+              // Swapping weapons between slots
+              swapEquipmentSlots(dragState.sourcePosition, slotType);
+            }
             finishDrag();
             return;
           } else {
@@ -3857,21 +3892,39 @@
         
         // Handle armor drops on armor slot
         if (item.type === 'armor' && slotType === 'armor') {
-          equipArmorFromGrid(item, dragState.itemId);
+          if (dragState.sourceType === 'grid') {
+            equipArmorFromGrid(item, dragState.itemId);
+          } else if (dragState.sourceType === 'equipment') {
+            // Cannot swap armor with itself - just cancel
+            cancelDrag();
+            return;
+          }
           finishDrag();
           return;
         }
         
-        // Handle vest drops on vest slot or armor slot (vests provide protection)
-        if (item.type === 'vest' && (slotType === 'vest' || slotType === 'armor')) {
-          equipVestFromGrid(item, dragState.itemId);
+        // Handle vest drops on vest slot only (not armor slot)
+        if (item.type === 'vest' && slotType === 'vest') {
+          if (dragState.sourceType === 'grid') {
+            equipVestFromGrid(item, dragState.itemId);
+          } else if (dragState.sourceType === 'equipment') {
+            // Cannot swap vest with itself - just cancel
+            cancelDrag();
+            return;
+          }
           finishDrag();
           return;
         }
         
         // Handle backpack drops
         if (item.type === 'backpack' && slotType === 'backpack') {
-          equipBackpackFromGrid(item, dragState.itemId);
+          if (dragState.sourceType === 'grid') {
+            equipBackpackFromGrid(item, dragState.itemId);
+          } else if (dragState.sourceType === 'equipment') {
+            // Cannot swap backpack with itself - just cancel
+            cancelDrag();
+            return;
+          }
           finishDrag();
           return;
         }
@@ -3939,6 +3992,14 @@
               currentWeapon = inventory.slot1 || inventory.slot2;
               inventory.currentSlot = currentWeapon === inventory.slot1 ? 1 : 2;
             }
+          } else if (dragState.sourcePosition === 'armor') {
+            player.armor = null;
+          } else if (dragState.sourcePosition === 'vest') {
+            inventory.vest = null;
+            initializeMagazineSlots();
+          } else if (dragState.sourcePosition === 'backpack') {
+            inventory.backpack = BACKPACKS.starter;
+            initializeBackpackGrid();
           }
         }
         
@@ -3949,6 +4010,73 @@
       }
       
       finishDrag();
+    }
+    
+    // Swap items between two equipment slots (for weapons only)
+    function swapEquipmentSlots(sourceSlot, targetSlot) {
+      // Get items from both slots
+      let sourceItem = null;
+      let targetItem = null;
+      
+      if (sourceSlot === 'primary') sourceItem = inventory.primaryWeapon;
+      else if (sourceSlot === 'secondary') sourceItem = inventory.secondaryWeapon;
+      else if (sourceSlot === 'melee') sourceItem = inventory.meleeWeapon;
+      
+      if (targetSlot === 'primary') targetItem = inventory.primaryWeapon;
+      else if (targetSlot === 'secondary') targetItem = inventory.secondaryWeapon;
+      else if (targetSlot === 'melee') targetItem = inventory.meleeWeapon;
+      
+      // Verify the source item can go to target slot
+      if (sourceItem && sourceItem.type === 'weapon') {
+        const weaponSlot = sourceItem.slot;
+        const validTarget = (targetSlot === 'primary' && weaponSlot === 1) ||
+                           (targetSlot === 'secondary' && weaponSlot === 2) ||
+                           (targetSlot === 'melee' && weaponSlot === 3);
+        
+        if (!validTarget) {
+          showNotification(`❌ Cannot move this weapon to ${targetSlot} slot`);
+          cancelDrag();
+          return;
+        }
+      }
+      
+      // Perform the swap
+      if (sourceSlot === 'primary') {
+        inventory.primaryWeapon = targetItem;
+        inventory.slot1 = targetItem;
+      } else if (sourceSlot === 'secondary') {
+        inventory.secondaryWeapon = targetItem;
+        inventory.slot2 = targetItem;
+      } else if (sourceSlot === 'melee') {
+        inventory.meleeWeapon = targetItem;
+        inventory.slot3 = targetItem;
+      }
+      
+      if (targetSlot === 'primary') {
+        inventory.primaryWeapon = sourceItem;
+        inventory.slot1 = sourceItem;
+      } else if (targetSlot === 'secondary') {
+        inventory.secondaryWeapon = sourceItem;
+        inventory.slot2 = sourceItem;
+      } else if (targetSlot === 'melee') {
+        inventory.meleeWeapon = sourceItem;
+        inventory.slot3 = sourceItem;
+      }
+      
+      // Update current weapon if needed
+      if (inventory.currentSlot === 1 && !inventory.slot1) {
+        currentWeapon = inventory.slot2 || inventory.slot3;
+        inventory.currentSlot = currentWeapon === inventory.slot2 ? 2 : 3;
+      } else if (inventory.currentSlot === 2 && !inventory.slot2) {
+        currentWeapon = inventory.slot1 || inventory.slot3;
+        inventory.currentSlot = currentWeapon === inventory.slot1 ? 1 : 3;
+      } else if (inventory.currentSlot === 3 && !inventory.slot3) {
+        currentWeapon = inventory.slot1 || inventory.slot2;
+        inventory.currentSlot = currentWeapon === inventory.slot1 ? 1 : 2;
+      }
+      
+      showNotification(`✅ Swapped weapons between ${sourceSlot} and ${targetSlot} slots`);
+      renderTarkovInventory();
     }
     
     // Handle dropping items onto magazine slots (swap or place)
