@@ -172,15 +172,15 @@
 
     /* Wave Alert */
     #waveAlert {
-      position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+      position:fixed; top:80px; left:50%; transform:translateX(-50%);
       background:linear-gradient(135deg, rgba(255,68,68,0.95), rgba(255,136,68,0.95));
-      padding:30px 60px; font-size:32px; font-weight:900; z-index:300;
+      padding:20px 50px; font-size:28px; font-weight:900; z-index:300;
       border:3px solid #fff; box-shadow:0 0 30px rgba(255,68,68,0.8);
       display:none; text-transform:uppercase; letter-spacing:2px;
       clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
     }
-    #waveAlert.active { display:block; animation:pulse 0.5s ease-in-out; }
-    @keyframes pulse { 0%, 100% { transform:translate(-50%, -50%) scale(1); } 50% { transform:translate(-50%, -50%) scale(1.1); } }
+    #waveAlert.active { display:block; animation:waveAlertPulse 0.5s ease-in-out; }
+    @keyframes waveAlertPulse { 0%, 100% { transform:translateX(-50%) scale(1); } 50% { transform:translateX(-50%) scale(1.1); } }
 
     /* Tarkov-Style Inventory Panel */
     #inventoryPanel {
@@ -508,17 +508,17 @@
 
     /* Notifications */
     #notification {
-      position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
-      background:var(--panel-bg); padding:22px 45px; font-size:20px; font-weight:700; z-index:250; display:none;
+      position:fixed; bottom:150px; left:50%; transform:translateX(-50%);
+      background:var(--panel-bg); padding:18px 40px; font-size:18px; font-weight:700; z-index:250; display:none;
       border:2px solid var(--cod-green); box-shadow:0 0 25px rgba(0,255,136,0.4);
       clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
     }
     #notification.active { display:block; animation:notifFade 2s ease-out; }
     @keyframes notifFade {
-      0% { opacity:0; transform:translate(-50%, -60%); }
-      10% { opacity:1; transform:translate(-50%, -50%); }
-      90% { opacity:1; transform:translate(-50%, -50%); }
-      100% { opacity:0; transform:translate(-50%, -40%); }
+      0% { opacity:0; transform:translateX(-50%) translateY(20px); }
+      10% { opacity:1; transform:translateX(-50%) translateY(0); }
+      90% { opacity:1; transform:translateX(-50%) translateY(0); }
+      100% { opacity:0; transform:translateX(-50%) translateY(-10px); }
     }
   </style>
 </head>
@@ -898,29 +898,95 @@
           thud.stop(audioCtx.currentTime + 0.08);
         }, 10);
       } else if (type === 'reload') {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = 'triangle';
-        osc.frequency.value = 350;
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.15);
+        // Enhanced realistic reload sound: magazine click, slide release, and bolt action
+        const master = audioCtx.createGain();
+        master.gain.value = 0.3;
+        master.connect(audioCtx.destination);
         
+        // Magazine ejection click (metallic click)
+        const clickNoise = audioCtx.createBufferSource();
+        const clickBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+        const clickData = clickBuffer.getChannelData(0);
+        for (let i = 0; i < clickData.length; i++) {
+          clickData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.01));
+        }
+        clickNoise.buffer = clickBuffer;
+        
+        const clickFilter = audioCtx.createBiquadFilter();
+        clickFilter.type = 'bandpass';
+        clickFilter.frequency.value = 2000;
+        clickFilter.Q.value = 5;
+        
+        const clickGain = audioCtx.createGain();
+        clickGain.gain.value = 0.6;
+        
+        clickNoise.connect(clickFilter);
+        clickFilter.connect(clickGain);
+        clickGain.connect(master);
+        clickNoise.start();
+        clickNoise.stop(audioCtx.currentTime + 0.05);
+        
+        // Magazine insertion sound (lower metallic thunk)
         setTimeout(() => {
-          const osc2 = audioCtx.createOscillator();
-          const gain2 = audioCtx.createGain();
-          osc2.connect(gain2);
-          gain2.connect(audioCtx.destination);
-          osc2.type = 'sine';
-          osc2.frequency.value = 250;
-          gain2.gain.setValueAtTime(0.08, audioCtx.currentTime);
-          gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-          osc2.start();
-          osc2.stop(audioCtx.currentTime + 0.12);
-        }, 100);
+          const insertNoise = audioCtx.createBufferSource();
+          const insertBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.08, audioCtx.sampleRate);
+          const insertData = insertBuffer.getChannelData(0);
+          for (let i = 0; i < insertData.length; i++) {
+            insertData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.015));
+          }
+          insertNoise.buffer = insertBuffer;
+          
+          const insertFilter = audioCtx.createBiquadFilter();
+          insertFilter.type = 'lowpass';
+          insertFilter.frequency.value = 800;
+          
+          const insertGain = audioCtx.createGain();
+          insertGain.gain.value = 0.7;
+          
+          insertNoise.connect(insertFilter);
+          insertFilter.connect(insertGain);
+          insertGain.connect(master);
+          insertNoise.start();
+          insertNoise.stop(audioCtx.currentTime + 0.08);
+        }, 150);
+        
+        // Slide/bolt release (metallic snap and spring)
+        setTimeout(() => {
+          // Metallic snap
+          const snapNoise = audioCtx.createBufferSource();
+          const snapBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.06, audioCtx.sampleRate);
+          const snapData = snapBuffer.getChannelData(0);
+          for (let i = 0; i < snapData.length; i++) {
+            snapData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.008));
+          }
+          snapNoise.buffer = snapBuffer;
+          
+          const snapFilter = audioCtx.createBiquadFilter();
+          snapFilter.type = 'highpass';
+          snapFilter.frequency.value = 1500;
+          
+          const snapGain = audioCtx.createGain();
+          snapGain.gain.value = 0.5;
+          
+          snapNoise.connect(snapFilter);
+          snapFilter.connect(snapGain);
+          snapGain.connect(master);
+          snapNoise.start();
+          snapNoise.stop(audioCtx.currentTime + 0.06);
+          
+          // Spring resonance
+          const springOsc = audioCtx.createOscillator();
+          const springGain = audioCtx.createGain();
+          springOsc.type = 'sine';
+          springOsc.frequency.setValueAtTime(400, audioCtx.currentTime);
+          springOsc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+          springGain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          springGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+          springOsc.connect(springGain);
+          springGain.connect(master);
+          springOsc.start();
+          springOsc.stop(audioCtx.currentTime + 0.1);
+        }, 350);
       } else if (type === 'wave') {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
