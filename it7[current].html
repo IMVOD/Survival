@@ -3305,6 +3305,7 @@
       });
     }
     
+    // Render magazine slots in vest (displays icon, ammo count, and type)
     function renderMagazineSlots() {
       const container = document.getElementById('magSlotsContainer');
       if (!container) return;
@@ -3324,7 +3325,8 @@
         if (isFilled) {
           html += `<div class="mag-slot-icon">${mag.icon || '📋'}</div>`;
           html += `<div class="mag-slot-ammo">${mag.currentAmmo}/${mag.capacity}</div>`;
-          html += `<div class="mag-slot-type">${mag.magType}</div>`;
+          // Use ammoType instead of magType (both should work but ammoType is more consistent)
+          html += `<div class="mag-slot-type">${mag.ammoType || mag.magType || 'unknown'}</div>`;
         } else {
           html += `<div class="mag-slot-icon">📋</div>`;
           html += `<div class="mag-slot-type">Empty</div>`;
