@@ -1097,22 +1097,26 @@
       starter: {
         id: 'starter', name: 'Starter Vest', icon: '🦺',
         magSlots: 4, price: 0, rarity: 'common',
-        description: 'Basic tactical vest with 4 magazine slots'
+        protection: 10, durability: 50, maxDurability: 50,
+        description: 'Basic tactical vest with 4 magazine slots and light protection'
       },
       tactical: {
         id: 'tactical', name: 'Tactical Vest', icon: '🦺',
         magSlots: 6, price: 1200, rarity: 'uncommon',
-        description: 'Improved vest with 6 magazine slots'
+        protection: 20, durability: 100, maxDurability: 100,
+        description: 'Improved vest with 6 magazine slots and moderate protection'
       },
       assault: {
         id: 'assault', name: 'Assault Vest', icon: '🦺',
         magSlots: 8, price: 2800, rarity: 'rare',
-        description: 'Combat vest with 8 magazine slots'
+        protection: 30, durability: 150, maxDurability: 150,
+        description: 'Combat vest with 8 magazine slots and strong protection'
       },
       operator: {
         id: 'operator', name: 'Operator Vest', icon: '🦺',
         magSlots: 10, price: 5000, rarity: 'epic',
-        description: 'Elite operator vest with 10 magazine slots'
+        protection: 40, durability: 200, maxDurability: 200,
+        description: 'Elite operator vest with 10 magazine slots and maximum protection'
       }
     };
 
@@ -1756,6 +1760,7 @@
       dmgIndicator.classList.add('active');
       setTimeout(() => dmgIndicator.classList.remove('active'), 300);
 
+      // Apply armor protection first
       if (player.armor && player.armor.durability > 0) {
         const absorbed = amount * (player.armor.protection / 100);
         player.armor.durability -= absorbed;
@@ -1765,6 +1770,19 @@
           showNotification('⚠️ Armor Destroyed');
         }
       }
+      
+      // Apply vest protection second
+      const vest = inventory.vest;
+      if (vest && vest.durability > 0 && vest.protection) {
+        const absorbed = amount * (vest.protection / 100);
+        vest.durability -= absorbed;
+        amount -= absorbed;
+        if (vest.durability <= 0) {
+          vest.durability = 0;
+          showNotification('⚠️ Vest Protection Depleted');
+        }
+      }
+      
       player.health -= amount;
       if (player.health <= 0) {
         player.health = 0;
@@ -2086,7 +2104,7 @@
       if (loot.type === 'ammoBox') {
         const pos = findEmptyPositionForItem(loot);
         if (pos) {
-          placeItemInGrid(loot, pos.row, pos.col);
+          placeItemInGrid(loot, pos.col, pos.row);
           showNotification(`📦 Found ${loot.name}!`);
         } else {
           showNotification('⚠️ Backpack full!');
@@ -2094,7 +2112,7 @@
       } else if (loot.type === 'magazine') {
         const pos = findEmptyPositionForItem(loot);
         if (pos) {
-          placeItemInGrid(loot, pos.row, pos.col);
+          placeItemInGrid(loot, pos.col, pos.row);
           showNotification(`📦 Found ${loot.name}!`);
         } else {
           showNotification('⚠️ Backpack full!');
@@ -2102,7 +2120,7 @@
       } else if (loot.type === 'backpack' || loot.type === 'vest') {
         const pos = findEmptyPositionForItem(loot);
         if (pos) {
-          placeItemInGrid(loot, pos.row, pos.col);
+          placeItemInGrid(loot, pos.col, pos.row);
           showNotification(`📦 Found ${loot.icon} ${loot.name}!`);
         } else {
           showNotification('⚠️ Backpack full!');
@@ -2110,7 +2128,7 @@
       } else if (loot.gridWidth && (loot.weaponType || loot.slot)) {
         const pos = findEmptyPositionForItem(loot);
         if (pos) {
-          placeItemInGrid(loot, pos.row, pos.col);
+          placeItemInGrid(loot, pos.col, pos.row);
           showNotification(`📦 Found ${loot.icon} ${loot.name}!`);
         } else {
           showNotification('⚠️ Backpack full!');
@@ -3425,6 +3443,47 @@
     function handleDragEnd(e) {
       if (!dragState.isDragging) return;
       
+      // Check if dropped on an equipment slot
+      const equipSlot = document.elementFromPoint(e.clientX, e.clientY)?.closest('.equipment-slot');
+      if (equipSlot && dragState.sourceType === 'grid') {
+        const slotType = equipSlot.dataset.slot;
+        const item = dragState.item;
+        
+        // Handle weapon drops
+        if (item.type === 'weapon') {
+          const weaponSlot = item.slot;
+          if ((slotType === 'primary' && weaponSlot === 1) || 
+              (slotType === 'secondary' && weaponSlot === 2) || 
+              (slotType === 'melee' && weaponSlot === 3)) {
+            equipWeaponFromGrid(item, dragState.itemId);
+            finishDrag();
+            return;
+          } else {
+            showNotification(`❌ Cannot equip this weapon in ${slotType} slot`);
+            cancelDrag();
+            return;
+          }
+        }
+        
+        // Handle vest drops on armor slot
+        if (item.type === 'vest' && slotType === 'armor') {
+          equipVestFromGrid(item, dragState.itemId);
+          finishDrag();
+          return;
+        }
+        
+        // Handle backpack drops
+        if (item.type === 'backpack' && slotType === 'backpack') {
+          equipBackpackFromGrid(item, dragState.itemId);
+          finishDrag();
+          return;
+        }
+        
+        showNotification(`❌ Cannot equip ${item.type} in ${slotType} slot`);
+        cancelDrag();
+        return;
+      }
+      
       const gridContainer = document.getElementById('backpackGrid');
       if (!gridContainer) {
         cancelDrag();
@@ -3497,6 +3556,9 @@
 
 // DROP MODE TOGGLE
 let dropModeActive = false;
+
+// AMMO BOX AND MAGAZINE SELECTION STATE
+let selectedAmmoBox = null;  // Stores the selected ammo box for filling magazines
 
 function toggleDropMode() {
   dropModeActive = !dropModeActive;
@@ -3634,20 +3696,41 @@ function handleMagazineSlotClick(slotIndex) {
     return;
   }
   
-  if (!currentWeapon || currentWeapon.weaponType === 'melee') {
-    showNotification('❌ No weapon equipped that uses magazines');
-    return;
-  }
-  
   const mag = inventory.magazineSlots[slotIndex];
   if (!mag) {
     showNotification('❌ Empty magazine slot');
     return;
   }
   
+  // If ammo box is selected, fill the magazine from it
+  if (selectedAmmoBox) {
+    fillMagazineFromAmmoBox(mag, slotIndex);
+    return;
+  }
+  
+  // If Shift is held, move magazine to backpack
+  if (keys['Shift']) {
+    const pos = findEmptyPositionForItem(mag);
+    if (pos) {
+      placeItemInGrid(mag, pos.col, pos.row);
+      inventory.magazineSlots[slotIndex] = null;
+      showNotification(`✅ Moved ${mag.name} to backpack`);
+      renderTarkovInventory();
+    } else {
+      showNotification('❌ Backpack is full!');
+    }
+    return;
+  }
+  
+  // Default behavior: swap with current weapon magazine
+  if (!currentWeapon || currentWeapon.weaponType === 'melee') {
+    showNotification('❌ No weapon equipped that uses magazines. Hold Shift to move to backpack.');
+    return;
+  }
+  
   const weaponAmmoType = getWeaponAmmoType(currentWeapon);
   if (mag.ammoType !== weaponAmmoType) {
-    showNotification(`❌ Wrong magazine type! Weapon uses ${weaponAmmoType}`);
+    showNotification(`❌ Wrong magazine type! Weapon uses ${weaponAmmoType}. Hold Shift to move to backpack.`);
     return;
   }
   
@@ -3737,7 +3820,13 @@ function handleGridItemClick(gridItemData) {
   }
   
   if (item.type === 'magazine') {
-    addMagazineToVestFromGrid(item, gridItemData.id);
+    // If an ammo box is selected, fill this magazine from it
+    if (selectedAmmoBox) {
+      fillMagazineFromAmmoBox(item, null, gridItemData.id);
+    } else {
+      // Otherwise, add magazine to vest
+      addMagazineToVestFromGrid(item, gridItemData.id);
+    }
     return;
   }
   
@@ -3773,41 +3862,62 @@ function dropGridItemInWorld(gridItemData) {
 }
 
 function fillMagazineWithAmmo(ammoBox, gridItemId) {
-  const emptySlotIndex = inventory.magazineSlots.findIndex(m => m === null);
-  if (emptySlotIndex === -1) {
-    showNotification('❌ No empty magazine slots in vest');
+  // Step 1: Select the ammo box
+  if (!selectedAmmoBox) {
+    selectedAmmoBox = { ammoBox, gridItemId };
+    showNotification(`✅ Selected ${ammoBox.name}. Now click a magazine to fill it.`);
     return;
   }
   
-  const magType = ammoBox.ammoType;
-  let capacity = 15;
-  if (magType === 'pistol') capacity = 15;
-  else if (magType === 'rifle') capacity = 30;
-  else if (magType === 'sniper') capacity = 5;
-  else if (magType === 'shotgun') capacity = 8;
-  
-  const magazine = {
-    id: 'magazine_' + Date.now(),
-    name: magType.charAt(0).toUpperCase() + magType.slice(1) + ' Magazine',
-    icon: '📋',
-    type: 'magazine',
-    magType: magType,
-    ammoType: magType,
-    capacity: capacity,
-    currentAmmo: Math.min(ammoBox.amount, capacity),
-    gridWidth: 1,
-    gridHeight: 2,
-    rarity: 'common'
-  };
-  
-  inventory.magazineSlots[emptySlotIndex] = magazine;
-  
-  ammoBox.amount -= magazine.currentAmmo;
-  if (ammoBox.amount <= 0) {
-    removeItemFromGrid(gridItemId);
+  // If clicking the same ammo box again, deselect it
+  if (selectedAmmoBox.gridItemId === gridItemId) {
+    selectedAmmoBox = null;
+    showNotification('❌ Ammo box deselected');
+    return;
   }
   
-  showNotification(`✅ Filled ${magazine.name} with ${magazine.currentAmmo} rounds`);
+  // If clicking a different ammo box, switch selection
+  selectedAmmoBox = { ammoBox, gridItemId };
+  showNotification(`✅ Selected ${ammoBox.name}. Now click a magazine to fill it.`);
+}
+
+function fillMagazineFromAmmoBox(magazine, magSlotIndex = null, magGridItemId = null) {
+  if (!selectedAmmoBox) {
+    showNotification('❌ Select an ammo box first!');
+    return;
+  }
+  
+  const ammoBox = selectedAmmoBox.ammoBox;
+  const gridItemId = selectedAmmoBox.gridItemId;
+  
+  // Check if magazine type matches ammo box type
+  if (magazine.ammoType !== ammoBox.ammoType) {
+    showNotification(`❌ Wrong magazine type! This is a ${magazine.ammoType} magazine, but the ammo box is ${ammoBox.ammoType}.`);
+    return;
+  }
+  
+  // Calculate how much ammo to add
+  const ammoNeeded = magazine.capacity - magazine.currentAmmo;
+  const ammoToAdd = Math.min(ammoNeeded, ammoBox.amount);
+  
+  if (ammoToAdd <= 0) {
+    showNotification('❌ Magazine is already full!');
+    return;
+  }
+  
+  // Fill the magazine
+  magazine.currentAmmo += ammoToAdd;
+  ammoBox.amount -= ammoToAdd;
+  
+  // Remove ammo box if empty
+  if (ammoBox.amount <= 0) {
+    removeItemFromGrid(gridItemId);
+    selectedAmmoBox = null;
+    showNotification(`✅ Filled magazine with ${ammoToAdd} rounds. Ammo box empty.`);
+  } else {
+    showNotification(`✅ Filled magazine with ${ammoToAdd} rounds. ${ammoBox.amount} rounds left in box.`);
+  }
+  
   renderTarkovInventory();
 }
 
@@ -3880,7 +3990,7 @@ function equipBackpackFromGrid(backpack, gridItemId) {
   if (oldBackpack && oldBackpack.id !== 'starter') {
     const pos = findEmptyPositionForItem(oldBackpack);
     if (pos) {
-      placeItemInGrid(oldBackpack, pos.row, pos.col);
+      placeItemInGrid(oldBackpack, pos.col, pos.row);
     }
   }
   
@@ -3904,7 +4014,7 @@ function equipVestFromGrid(vest, gridItemId) {
   if (oldVest && oldVest.id !== 'starter') {
     const pos = findEmptyPositionForItem(oldVest);
     if (pos) {
-      placeItemInGrid(oldVest, pos.row, pos.col);
+      placeItemInGrid(oldVest, pos.col, pos.row);
     }
   }
   
