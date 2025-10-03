@@ -358,6 +358,17 @@
       border-color:rgba(0,255,136,0.5); background:rgba(0,255,136,0.1);
     }
     
+    /* Drag-and-drop feedback for magazine slots */
+    .mag-slot.valid-drop {
+      border-color:var(--cod-green); background:rgba(0,255,136,0.25);
+      box-shadow:0 0 15px rgba(0,255,136,0.5);
+    }
+    
+    .mag-slot.invalid-drop {
+      border-color:#ff4444; background:rgba(255,68,68,0.2);
+      box-shadow:0 0 15px rgba(255,68,68,0.5);
+    }
+    
     .mag-slot-icon {
       font-size:32px;
     }
@@ -3494,7 +3505,40 @@
       dragState.ghostElement.style.left = `${e.clientX - dragState.mouseOffset.x}px`;
       dragState.ghostElement.style.top = `${e.clientY - dragState.mouseOffset.y}px`;
       
+      // Update visual feedback for drop zones
       updateGridValidation(e.clientX, e.clientY);
+      updateMagazineSlotValidation(e.clientX, e.clientY);
+    }
+    
+    // Add visual feedback for magazine slots during drag
+    function updateMagazineSlotValidation(mouseX, mouseY) {
+      // Clear all magazine slot highlights first
+      clearMagazineSlotHighlights();
+      
+      // Check if hovering over a magazine slot
+      const magSlot = document.elementFromPoint(mouseX, mouseY)?.closest('.mag-slot');
+      if (!magSlot) return;
+      
+      const item = dragState.item;
+      
+      // Only magazines can be dropped in magazine slots
+      if (item.type !== 'magazine') {
+        magSlot.classList.add('invalid-drop');
+        return;
+      }
+      
+      // Check if slot is available for this magazine
+      const targetSlotIndex = parseInt(magSlot.dataset.slot);
+      const existingMag = inventory.magazineSlots[targetSlotIndex];
+      
+      // Can always drop - either empty slot or will swap
+      magSlot.classList.add('valid-drop');
+    }
+    
+    function clearMagazineSlotHighlights() {
+      document.querySelectorAll('.mag-slot.valid-drop, .mag-slot.invalid-drop').forEach(slot => {
+        slot.classList.remove('valid-drop', 'invalid-drop');
+      });
     }
     
     function updateGridValidation(mouseX, mouseY) {
@@ -3548,6 +3592,8 @@
           cell.classList.remove('occupied', 'invalid');
         }
       });
+      // Also clear magazine slot highlights
+      clearMagazineSlotHighlights();
     }
     
     function handleDragEnd(e) {
