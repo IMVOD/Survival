@@ -3465,8 +3465,8 @@
           }
         }
         
-        // Handle vest drops on armor slot
-        if (item.type === 'vest' && slotType === 'armor') {
+        // Handle vest drops on vest slot or armor slot (vests provide protection)
+        if (item.type === 'vest' && (slotType === 'vest' || slotType === 'armor')) {
           equipVestFromGrid(item, dragState.itemId);
           finishDrag();
           return;
@@ -4096,6 +4096,10 @@ function showTooltip(item, x, y) {
     html += `<div class="tooltip-stat"><span>Capacity:</span><span>${item.cols * item.rows} cells</span></div>`;
   } else if (item.type === 'vest') {
     html += `<div class="tooltip-stat"><span>Mag Slots:</span><span>${item.magSlots}</span></div>`;
+    if (item.protection !== undefined) {
+      html += `<div class="tooltip-stat"><span>Protection:</span><span>${item.protection}%</span></div>`;
+      html += `<div class="tooltip-stat"><span>Durability:</span><span>${Math.round(item.durability)}/${item.maxDurability}</span></div>`;
+    }
   } else if (item.protection !== undefined) {
     html += `<div class="tooltip-stat"><span>Protection:</span><span>${item.protection}%</span></div>`;
     html += `<div class="tooltip-stat"><span>Durability:</span><span>${item.durability}/${item.maxDurability}</span></div>`;
