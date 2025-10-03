@@ -1811,7 +1811,6 @@
           const collision = checkBuildingCollision(z.x + (dx/distToTarget) * z.speed * dt, z.y + (dy/distToTarget) * z.speed * dt, z.radius);
           if (!collision) {
             // Exterior aggression: zombies farther than 1200 units from center get a speed boost toward player
-            const centerDist = Math.hypot(z.x - WORLD_SIZE/2, z.y - WORLD_SIZE/2);
             const aggression = centerDist > 1200 ? 1.35 : 1;
             z.x += (dx / distToTarget) * z.speed * dt * aggression;
             z.y += (dy / distToTarget) * z.speed * dt * aggression;
