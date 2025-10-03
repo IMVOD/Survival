@@ -3281,7 +3281,12 @@
         if (item.type === 'magazine' && item.currentAmmo !== undefined) {
           contentHtml += `<div class="grid-item-ammo">${item.currentAmmo}/${item.capacity}</div>`;
         } else if (item.type === 'ammoBox' && item.amount !== undefined) {
-          contentHtml += `<div class="grid-item-ammo">${item.amount}</div>`;
+          contentHtml += `<div class="grid-item-ammo">${item.amount}`;
+          // Add lock icon if ammo box is locked
+          if (isAmmoBoxLocked(item)) {
+            contentHtml += ` 🔒`;
+          }
+          contentHtml += `</div>`;
         } else if (item.type === 'weapon' && item.mag !== undefined) {
           contentHtml += `<div class="grid-item-ammo">${item.mag}/${item.magSize}</div>`;
         }
@@ -3443,6 +3448,12 @@
       const itemId = gridItem.dataset.itemId;
       const gridItemData = inventory.gridItems.find(gi => gi.id === itemId);
       if (!gridItemData) return;
+      
+      // Move Prevention: Check if this is a locked ammo box
+      if (isAmmoBoxLocked(gridItemData.item)) {
+        showNotification(`🔒 Cannot move ammo box! It still has ${gridItemData.item.amount} rounds and compatible magazines need filling. Click to auto-fill magazines.`);
+        return; // Prevent any drag operation
+      }
       
       // Store initial state but don't start dragging yet
       dragState.isDragging = true; // Set to true to prevent click handler from firing during drag
@@ -3847,7 +3858,34 @@
 let dropModeActive = false;
 
 // AMMO BOX AND MAGAZINE SELECTION STATE
-let selectedAmmoBox = null;  // Stores the selected ammo box for filling magazines
+// No longer needed - ammo boxes now auto-fill all compatible magazines on click
+
+// Helper function to check if an ammo box should be locked (cannot be moved)
+// Ammo boxes are locked when they have ammo AND there are compatible magazines that need filling
+function isAmmoBoxLocked(ammoBox) {
+  if (!ammoBox || ammoBox.type !== 'ammoBox') return false;
+  if (ammoBox.amount <= 0) return false; // Empty boxes can be moved
+  
+  // Check if there are any compatible magazines that need filling
+  
+  // Check vest magazine slots
+  for (let i = 0; i < inventory.magazineSlots.length; i++) {
+    const mag = inventory.magazineSlots[i];
+    if (mag && mag.ammoType === ammoBox.ammoType && mag.currentAmmo < mag.capacity) {
+      return true; // Found a compatible magazine that needs filling
+    }
+  }
+  
+  // Check backpack grid for magazines
+  for (const gridItem of inventory.gridItems) {
+    const item = gridItem.item;
+    if (item.type === 'magazine' && item.ammoType === ammoBox.ammoType && item.currentAmmo < item.capacity) {
+      return true; // Found a compatible magazine that needs filling
+    }
+  }
+  
+  return false; // No compatible magazines need filling, box can be moved
+}
 
 function toggleDropMode() {
   dropModeActive = !dropModeActive;
@@ -3977,7 +4015,7 @@ function setupMagazineSlots() {
 }
 
 // Handle clicking on magazine slots in vest
-// Supports: ammo filling, Shift+click to move to backpack, swapping with weapon magazine
+// Supports: Shift+click to move to backpack, swapping with weapon magazine
 function handleMagazineSlotClick(slotIndex) {
   // Drop mode: drop magazine on the ground
   if (dropModeActive) {
@@ -3993,12 +4031,6 @@ function handleMagazineSlotClick(slotIndex) {
   // Empty slot clicked
   if (!mag) {
     showNotification('❌ Empty magazine slot - Drag a magazine here or Shift+click magazine in backpack');
-    return;
-  }
-  
-  // If ammo box is selected, fill the magazine from it
-  if (selectedAmmoBox) {
-    fillMagazineFromAmmoBox(mag, slotIndex);
     return;
   }
   
@@ -4116,10 +4148,8 @@ function handleGridItemClick(gridItemData) {
   }
   
   if (item.type === 'magazine') {
-    // If an ammo box is selected, fill this magazine from it
-    if (selectedAmmoBox) {
-      fillMagazineFromAmmoBox(item, null, gridItemData.id);
-    } else if (keys['Shift']) {
+    // Magazines no longer have special ammo box logic - auto-fill happens when clicking ammo box
+    if (keys['Shift']) {
       // Shift+click: Try to add magazine to vest
       const emptySlot = findEmptyMagazineSlot();
       if (emptySlot === -1) {
@@ -4171,67 +4201,81 @@ function dropGridItemInWorld(gridItemData) {
 // Select/deselect ammo box for filling magazines
 // Click ammo box to select it, then click a magazine in vest or backpack to fill
 function fillMagazineWithAmmo(ammoBox, gridItemId) {
-  // Step 1: Select the ammo box
-  if (!selectedAmmoBox) {
-    selectedAmmoBox = { ammoBox, gridItemId };
-    showNotification(`✅ Selected ${ammoBox.name} (${ammoBox.amount} rounds). Click a magazine to fill it.`);
+  // One-Click Auto-Fill: Automatically fill ALL compatible magazines
+  
+  // Find all compatible magazines in vest and backpack
+  const compatibleMags = [];
+  
+  // Check vest magazine slots
+  for (let i = 0; i < inventory.magazineSlots.length; i++) {
+    const mag = inventory.magazineSlots[i];
+    if (mag && mag.ammoType === ammoBox.ammoType && mag.currentAmmo < mag.capacity) {
+      compatibleMags.push({
+        magazine: mag,
+        location: 'vest',
+        index: i,
+        ammoNeeded: mag.capacity - mag.currentAmmo
+      });
+    }
+  }
+  
+  // Check backpack grid for magazines
+  for (const gridItem of inventory.gridItems) {
+    const item = gridItem.item;
+    if (item.type === 'magazine' && item.ammoType === ammoBox.ammoType && item.currentAmmo < item.capacity) {
+      compatibleMags.push({
+        magazine: item,
+        location: 'backpack',
+        gridItemId: gridItem.id,
+        ammoNeeded: item.capacity - item.currentAmmo
+      });
+    }
+  }
+  
+  // Check if there are no compatible magazines
+  if (compatibleMags.length === 0) {
+    showNotification(`❌ No compatible ${ammoBox.ammoType} magazines found that need filling!`);
     return;
   }
   
-  // If clicking the same ammo box again, deselect it
-  if (selectedAmmoBox.gridItemId === gridItemId) {
-    selectedAmmoBox = null;
-    showNotification('❌ Ammo box deselected');
-    return;
+  // Smart Prioritization: Sort magazines by lowest ammo count first
+  compatibleMags.sort((a, b) => a.magazine.currentAmmo - b.magazine.currentAmmo);
+  
+  // Fill magazines with available ammo
+  let totalRoundsFilled = 0;
+  let magazinesFilled = 0;
+  let remainingAmmo = ammoBox.amount;
+  
+  for (const magData of compatibleMags) {
+    if (remainingAmmo <= 0) break;
+    
+    const ammoToAdd = Math.min(magData.ammoNeeded, remainingAmmo);
+    magData.magazine.currentAmmo += ammoToAdd;
+    remainingAmmo -= ammoToAdd;
+    totalRoundsFilled += ammoToAdd;
+    magazinesFilled++;
   }
   
-  // If clicking a different ammo box, switch selection
-  selectedAmmoBox = { ammoBox, gridItemId };
-  showNotification(`✅ Selected ${ammoBox.name} (${ammoBox.amount} rounds). Click a magazine to fill it.`);
+  // Update ammo box amount
+  ammoBox.amount = remainingAmmo;
+  
+  // Enhanced Notifications with detailed feedback
+  let notification = `✅ Auto-filled ${magazinesFilled} magazine${magazinesFilled > 1 ? 's' : ''} with ${totalRoundsFilled} rounds`;
+  
+  if (remainingAmmo > 0) {
+    notification += `. ${remainingAmmo} rounds remaining in box.`;
+  } else {
+    notification += `. Ammo box is now empty.`;
+    // Remove ammo box if empty
+    removeItemFromGrid(gridItemId);
+  }
+  
+  showNotification(notification);
+  renderTarkovInventory();
 }
 
 // Fill a magazine from the currently selected ammo box
 // Can be called on magazines in vest slots or backpack grid
-function fillMagazineFromAmmoBox(magazine, magSlotIndex = null, magGridItemId = null) {
-  if (!selectedAmmoBox) {
-    showNotification('❌ Select an ammo box first!');
-    return;
-  }
-  
-  const ammoBox = selectedAmmoBox.ammoBox;
-  const gridItemId = selectedAmmoBox.gridItemId;
-  
-  // Validate magazine and ammo types match
-  if (magazine.ammoType !== ammoBox.ammoType) {
-    showNotification(`❌ Incompatible! Magazine: ${magazine.ammoType} | Ammo box: ${ammoBox.ammoType}`);
-    return;
-  }
-  
-  // Calculate how much ammo to add
-  const ammoNeeded = magazine.capacity - magazine.currentAmmo;
-  const ammoToAdd = Math.min(ammoNeeded, ammoBox.amount);
-  
-  if (ammoToAdd <= 0) {
-    showNotification(`❌ Magazine is already full! (${magazine.currentAmmo}/${magazine.capacity})`);
-    return;
-  }
-  
-  // Fill the magazine
-  magazine.currentAmmo += ammoToAdd;
-  ammoBox.amount -= ammoToAdd;
-  
-  // Remove ammo box if empty, keep selection if more ammo remains
-  if (ammoBox.amount <= 0) {
-    removeItemFromGrid(gridItemId);
-    selectedAmmoBox = null;
-    showNotification(`✅ Filled +${ammoToAdd} rounds (${magazine.currentAmmo}/${magazine.capacity}). Ammo box empty.`);
-  } else {
-    showNotification(`✅ Filled +${ammoToAdd} rounds (${magazine.currentAmmo}/${magazine.capacity}). ${ammoBox.amount} left in box.`);
-  }
-  
-  renderTarkovInventory();
-}
-
 function equipWeaponFromGrid(weapon, gridItemId) {
   const slotType = weapon.slot;
   
