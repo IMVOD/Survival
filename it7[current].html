@@ -2232,41 +2232,24 @@
       box.opened = true;
       playSound('loot');
       
-      const loot = generateLoot();
+      // Check if this is a dropped item first
+      const loot = box.droppedItem || generateLoot();
       
-      if (loot.type === 'ammoBox') {
-        const pos = findEmptyPositionForItem(loot);
-        if (pos) {
-          placeItemInGrid(loot, pos.col, pos.row);
-          showNotification(`📦 Found ${loot.name}!`);
-        } else {
-          showNotification('⚠️ Backpack full!');
-        }
-      } else if (loot.type === 'magazine') {
-        const pos = findEmptyPositionForItem(loot);
-        if (pos) {
-          placeItemInGrid(loot, pos.col, pos.row);
-          showNotification(`📦 Found ${loot.name}!`);
-        } else {
-          showNotification('⚠️ Backpack full!');
-        }
-      } else if (loot.type === 'backpack' || loot.type === 'vest') {
-        const pos = findEmptyPositionForItem(loot);
-        if (pos) {
-          placeItemInGrid(loot, pos.col, pos.row);
-          showNotification(`📦 Found ${loot.icon} ${loot.name}!`);
-        } else {
-          showNotification('⚠️ Backpack full!');
-        }
-      } else if (loot.gridWidth && (loot.weaponType || loot.slot)) {
-        const pos = findEmptyPositionForItem(loot);
-        if (pos) {
-          placeItemInGrid(loot, pos.col, pos.row);
-          showNotification(`📦 Found ${loot.icon} ${loot.name}!`);
+      // Handle dropped items - try to place in backpack
+      const pos = findEmptyPositionForItem(loot);
+      if (pos) {
+        placeItemInGrid(loot, pos.col, pos.row);
+        showNotification(`📦 ${box.droppedItem ? 'Picked up' : 'Found'} ${loot.name}!`);
+      } else {
+        // If backpack is full and this is a dropped item, leave it in the box
+        if (box.droppedItem) {
+          box.opened = false; // Reopen the box so player can try again
+          showNotification('⚠️ Backpack full! Free up space to pick up this item.');
         } else {
           showNotification('⚠️ Backpack full!');
         }
       }
+      
       renderTarkovInventory();
     }
 
@@ -2533,7 +2516,7 @@
       // Draw loot boxes
       for (const box of lootBoxes) {
         if (box.opened) continue;
-        if (!box.building.explored) continue;
+        if (box.building && !box.building.explored) continue;
         
         const pulse = Math.sin(box.pulsePhase) * 0.2 + 1;
         const glowSize = box.size * pulse;
@@ -2823,7 +2806,7 @@
 
       // Draw loot boxes
       for (const box of lootBoxes) {
-        if (!box.opened && box.building.explored) {
+        if (!box.opened && (!box.building || box.building.explored)) {
           mmCtx.fillStyle = '#ffd700';
           mmCtx.fillRect(box.x * scale - 1, box.y * scale - 1, 3, 3);
         }
@@ -3946,6 +3929,17 @@ function handleEquipmentSlotClick(slotName) {
 function dropItemInWorld(item, sourceType) {
   const dropOffset = 60;
   const angle = Math.random() * Math.PI * 2;
+  
+  // Ensure item has necessary grid properties for backpack placement
+  if (!item.gridWidth) item.gridWidth = 2;
+  if (!item.gridHeight) item.gridHeight = 2;
+  if (!item.icon && sourceType === 'armor') item.icon = '🛡️';
+  if (!item.type) {
+    if (sourceType === 'armor') item.type = 'armor';
+    else if (sourceType === 'backpack') item.type = 'backpack';
+    else if (sourceType === 'vest') item.type = 'vest';
+    else if (sourceType === 'primary' || sourceType === 'secondary' || sourceType === 'melee') item.type = 'weapon';
+  }
   
   lootBoxes.push({
     x: player.x + Math.cos(angle) * dropOffset,
