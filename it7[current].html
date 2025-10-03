@@ -743,6 +743,7 @@
     const BUILDING_COUNT = 24;
     const ZOMBIE_WANDER_RADIUS = 150;
     const ZOMBIE_DETECT_RANGE = 250;
+    const CENTER_PROXIMITY_THRESHOLD = 800; // Distance from center to switch to wander mode
     const STREET_WIDTH = 120;
     const NOISE_ATTRACT_RANGE = 400;
     const DAY_LENGTH = 120;
@@ -1746,13 +1747,15 @@
           x, y, radius: 10 + Math.random() * 5,
           health: 40 + day * 10, maxHealth: 40 + day * 10,
           speed: 30 + day * 3, wanderAngle: Math.random() * Math.PI * 2,
-          wanderTimer: 0, state: 'wander',
-          // bias their wandering target toward the middle of the map
-          targetX: WORLD_SIZE/2 + (Math.random()-0.5) * WORLD_SIZE * 0.25,
-          targetY: WORLD_SIZE/2 + (Math.random()-0.5) * WORLD_SIZE * 0.25,
+          wanderTimer: 0, state: 'moveToCenter',
+          // Target center of map for moveToCenter state
+          targetX: WORLD_SIZE/2,
+          targetY: WORLD_SIZE/2,
           animOffset: Math.random() * Math.PI * 2,
           // Mark as outdoor zombie (no building property)
-          isOutdoor: true
+          isOutdoor: true,
+          // Flag as wave zombie for three-state AI
+          isWaveZombie: true
         });
       }
     }
@@ -1774,15 +1777,61 @@
       z.x = Math.max(z.radius, Math.min(WORLD_SIZE - z.radius, z.x));
       z.y = Math.max(z.radius, Math.min(WORLD_SIZE - z.radius, z.y));
 
-      const dist = Math.hypot(z.x - player.x, z.y - player.y);
+      // Optimize: calculate distances once and reuse
+      const distToPlayer = Math.hypot(z.x - player.x, z.y - player.y);
+      const centerX = WORLD_SIZE / 2;
+      const centerY = WORLD_SIZE / 2;
+      const distToCenter = Math.hypot(z.x - centerX, z.y - centerY);
 
-      if (dist < ZOMBIE_DETECT_RANGE) {
-        z.state = 'chase';
-        z.targetX = player.x;
-        z.targetY = player.y;
+      // State transitions for wave zombies
+      if (z.isWaveZombie) {
+        // Player detection always triggers chase (from any state)
+        if (distToPlayer < ZOMBIE_DETECT_RANGE) {
+          z.state = 'chase';
+          z.targetX = player.x;
+          z.targetY = player.y;
+        }
+        // If in moveToCenter and near center, switch to wander
+        else if (z.state === 'moveToCenter' && distToCenter < CENTER_PROXIMITY_THRESHOLD) {
+          z.state = 'wander';
+          z.wanderAngle = Math.random() * Math.PI * 2;
+          z.wanderTimer = 2 + Math.random() * 3;
+        }
+      } else {
+        // Original behavior for non-wave zombies
+        if (distToPlayer < ZOMBIE_DETECT_RANGE) {
+          z.state = 'chase';
+          z.targetX = player.x;
+          z.targetY = player.y;
+        }
       }
 
-      if (z.state === 'chase') {
+      // State behaviors
+      if (z.state === 'moveToCenter') {
+        // Move toward center at 50% speed
+        const dx = centerX - z.x;
+        const dy = centerY - z.y;
+        const distToTarget = Math.hypot(dx, dy);
+        
+        if (distToTarget > 5) {
+          const collision = checkBuildingCollision(
+            z.x + (dx/distToTarget) * z.speed * dt * 0.5,
+            z.y + (dy/distToTarget) * z.speed * dt * 0.5,
+            z.radius
+          );
+          
+          if (!collision) {
+            // Move toward center at 50% speed
+            z.x += (dx / distToTarget) * z.speed * dt * 0.5;
+            z.y += (dy / distToTarget) * z.speed * dt * 0.5;
+          } else {
+            // Building collision: navigate around it
+            z.wanderAngle += (Math.random() - 0.5) * 2;
+            z.x += Math.cos(z.wanderAngle) * z.speed * dt * 0.25;
+            z.y += Math.sin(z.wanderAngle) * z.speed * dt * 0.25;
+          }
+        }
+      } else if (z.state === 'chase') {
         const dx = z.targetX - z.x;
         const dy = z.targetY - z.y;
         const distToTarget = Math.hypot(dx, dy);
@@ -1790,8 +1839,7 @@
           const collision = checkBuildingCollision(z.x + (dx/distToTarget) * z.speed * dt, z.y + (dy/distToTarget) * z.speed * dt, z.radius);
           if (!collision) {
             // Exterior aggression: zombies farther than 1200 units from center get a speed boost toward player
-            const centerDist = Math.hypot(z.x - WORLD_SIZE/2, z.y - WORLD_SIZE/2);
-            const aggression = centerDist > 1200 ? 1.35 : 1;
+            const aggression = distToCenter > 1200 ? 1.35 : 1;
             z.x += (dx / distToTarget) * z.speed * dt * aggression;
             z.y += (dy / distToTarget) * z.speed * dt * aggression;
           } else {
@@ -1807,10 +1855,10 @@
         const now = performance.now();
         if (!z.lastAttack) z.lastAttack = 0;
         
-        if (z.health > 0 && dist < attackRange && now - z.lastAttack >= 500) {
+        if (z.health > 0 && distToPlayer < attackRange && now - z.lastAttack >= 500) {
           // Debug logging for attack events
           if (window.debugZombieAttacks) {
-            console.log(`[ZOMBIE ATTACK] Distance: ${dist.toFixed(1)}, Range: ${attackRange.toFixed(1)}, Zombie: (${z.x.toFixed(0)}, ${z.y.toFixed(0)}), Player: (${player.x.toFixed(0)}, ${player.y.toFixed(0)})`);
+            console.log(`[ZOMBIE ATTACK] Distance: ${distToPlayer.toFixed(1)}, Range: ${attackRange.toFixed(1)}, Zombie: (${z.x.toFixed(0)}, ${z.y.toFixed(0)}), Player: (${player.x.toFixed(0)}, ${player.y.toFixed(0)})`);
           }
           damagePlayer(12); // Damage per attack (not per frame)
           z.lastAttack = now;
