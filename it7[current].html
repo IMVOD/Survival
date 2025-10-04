@@ -3321,11 +3321,12 @@
         contentHtml += `<div class="grid-item-icon">${item.icon || '📦'}</div>`;
         contentHtml += `<div class="grid-item-name">${item.name}</div>`;
         
-        if (item.type === 'magazine' && item.currentAmmo !== undefined) {
+        const itemType = normalizeItemType(item);
+        if (itemType === 'magazine' && item.currentAmmo !== undefined) {
           contentHtml += `<div class="grid-item-ammo">${item.currentAmmo}/${item.capacity}</div>`;
-        } else if (item.type === 'ammoBox' && item.amount !== undefined) {
+        } else if (itemType === 'ammobox' && item.amount !== undefined) {
           contentHtml += `<div class="grid-item-ammo">${item.amount}</div>`;
-        } else if (item.type === 'weapon' && item.mag !== undefined) {
+        } else if (isWeaponItem(item) && item.mag !== undefined) {
           contentHtml += `<div class="grid-item-ammo">${item.mag}/${item.magSize}</div>`;
         }
         
@@ -3497,7 +3498,8 @@
       if (!gridItemData) return;
       
       // Prevent dragging ammo boxes that still have ammo and compatible magazines to fill
-      if (gridItemData.item.type === 'ammoBox' && !canMoveAmmoBox(gridItemData.item)) {
+      const itemType = normalizeItemType(gridItemData.item);
+      if (itemType === 'ammobox' && !canMoveAmmoBox(gridItemData.item)) {
         showNotification(`❌ Cannot move ammo box! It still has ${gridItemData.item.amount} rounds and compatible magazines need filling.`);
         return;
       }
@@ -3689,6 +3691,23 @@
       }
     }
     
+    // Helper function to check if item is a weapon
+    function isWeaponItem(item) {
+      if (!item) return false;
+      const itemType = (item.type || '').toString().toLowerCase().trim();
+      return itemType === 'weapon' || 
+             itemType === 'primary' || 
+             itemType === 'secondary' || 
+             itemType === 'melee' || 
+             item.slot !== undefined;
+    }
+    
+    // Helper function to normalize item type for comparison
+    function normalizeItemType(item) {
+      if (!item || !item.type) return '';
+      return item.type.toString().toLowerCase().trim();
+    }
+    
     // Add visual feedback for equipment slots during drag
     function updateEquipmentSlotValidation(mouseX, mouseY) {
       // Clear all equipment slot highlights first
@@ -3707,27 +3726,33 @@
       }
       
       let isValid = false;
+      const itemType = normalizeItemType(item);
       
       // Handle weapon drops on weapon slots
-      if (item.type === 'weapon') {
+      if (isWeaponItem(item)) {
         const weaponSlot = item.slot;
         if ((slotType === 'primary' && weaponSlot === 1) || 
             (slotType === 'secondary' && weaponSlot === 2) || 
             (slotType === 'melee' && weaponSlot === 3)) {
           isValid = true;
+        } else {
+          console.log(`[Slot Validation] Weapon slot mismatch: item slot=${weaponSlot}, target slot=${slotType}`);
         }
       }
       // Handle armor drops on armor slot
-      else if (item.type === 'armor' && slotType === 'armor') {
+      else if (itemType === 'armor' && slotType === 'armor') {
         isValid = true;
       }
-      // Handle vest drops on vest slot (vests can also go in armor slot for compatibility)
-      else if (item.type === 'vest' && (slotType === 'vest' || slotType === 'armor')) {
+      // Handle vest drops on vest slot only
+      else if (itemType === 'vest' && slotType === 'vest') {
         isValid = true;
       }
       // Handle backpack drops on backpack slot
-      else if (item.type === 'backpack' && slotType === 'backpack') {
+      else if (itemType === 'backpack' && slotType === 'backpack') {
         isValid = true;
+      }
+      else {
+        console.log(`[Slot Validation] Invalid drop: item type="${itemType}" cannot go in slot="${slotType}"`);
       }
       
       if (isValid) {
@@ -3867,9 +3892,10 @@
       const equipSlot = document.elementFromPoint(e.clientX, e.clientY)?.closest('.equipment-slot');
       if (equipSlot) {
         const slotType = equipSlot.dataset.slot;
+        const itemType = normalizeItemType(item);
         
         // Handle weapon drops
-        if (item.type === 'weapon') {
+        if (isWeaponItem(item)) {
           const weaponSlot = item.slot;
           if ((slotType === 'primary' && weaponSlot === 1) || 
               (slotType === 'secondary' && weaponSlot === 2) || 
@@ -3884,6 +3910,7 @@
             finishDrag();
             return;
           } else {
+            console.log(`[Drop Failed] Weapon slot mismatch: item slot=${weaponSlot}, target slot=${slotType}`);
             showNotification(`❌ Cannot equip this weapon in ${slotType} slot`);
             cancelDrag();
             return;
@@ -3891,7 +3918,7 @@
         }
         
         // Handle armor drops on armor slot
-        if (item.type === 'armor' && slotType === 'armor') {
+        if (itemType === 'armor' && slotType === 'armor') {
           if (dragState.sourceType === 'grid') {
             equipArmorFromGrid(item, dragState.itemId);
           } else if (dragState.sourceType === 'equipment') {
@@ -3903,8 +3930,8 @@
           return;
         }
         
-        // Handle vest drops on vest slot only (not armor slot)
-        if (item.type === 'vest' && slotType === 'vest') {
+        // Handle vest drops on vest slot only
+        if (itemType === 'vest' && slotType === 'vest') {
           if (dragState.sourceType === 'grid') {
             equipVestFromGrid(item, dragState.itemId);
           } else if (dragState.sourceType === 'equipment') {
@@ -3917,7 +3944,7 @@
         }
         
         // Handle backpack drops
-        if (item.type === 'backpack' && slotType === 'backpack') {
+        if (itemType === 'backpack' && slotType === 'backpack') {
           if (dragState.sourceType === 'grid') {
             equipBackpackFromGrid(item, dragState.itemId);
           } else if (dragState.sourceType === 'equipment') {
@@ -3929,7 +3956,8 @@
           return;
         }
         
-        showNotification(`❌ Cannot equip ${item.type} in ${slotType} slot`);
+        console.log(`[Drop Failed] Invalid item type: item type="${itemType}" cannot go in slot="${slotType}"`);
+        showNotification(`❌ Cannot equip ${itemType || 'this item'} in ${slotType} slot`);
         cancelDrag();
         return;
       }
@@ -4226,11 +4254,16 @@ function dropItemInWorld(item, sourceType) {
   if (!item.gridWidth) item.gridWidth = 2;
   if (!item.gridHeight) item.gridHeight = 2;
   if (!item.icon && sourceType === 'armor') item.icon = '🛡️';
+  
+  // Ensure item has correct type property
   if (!item.type) {
     if (sourceType === 'armor') item.type = 'armor';
     else if (sourceType === 'backpack') item.type = 'backpack';
     else if (sourceType === 'vest') item.type = 'vest';
-    else if (sourceType === 'primary' || sourceType === 'secondary' || sourceType === 'melee') item.type = 'weapon';
+    else if (sourceType === 'primary' || sourceType === 'secondary' || sourceType === 'melee') {
+      // Keep the original weapon type (primary/secondary/melee)
+      item.type = sourceType;
+    }
   }
   
   lootBoxes.push({
@@ -4430,23 +4463,25 @@ function setupGridItemHandlers() {
 
 function handleGridItemClick(gridItemData) {
   const item = gridItemData.item;
+  const itemType = normalizeItemType(item);
   
   if (dropModeActive) {
     dropGridItemInWorld(gridItemData);
     return;
   }
   
-  if (item.type === 'ammoBox') {
+  if (itemType === 'ammobox') {
     fillMagazineWithAmmo(item, gridItemData.id);
     return;
   }
   
-  if (item.type === 'weapon') {
+  // Handle weapons (check for weapon types)
+  if (isWeaponItem(item)) {
     equipWeaponFromGrid(item, gridItemData.id);
     return;
   }
   
-  if (item.type === 'magazine') {
+  if (itemType === 'magazine') {
     // Shift+click: Try to add magazine to vest
     if (keys['Shift']) {
       // Shift+click: Try to add magazine to vest
@@ -4466,20 +4501,22 @@ function handleGridItemClick(gridItemData) {
     return;
   }
   
-  if (item.type === 'backpack') {
+  if (itemType === 'backpack') {
     equipBackpackFromGrid(item, gridItemData.id);
     return;
   }
   
-  if (item.type === 'vest') {
+  if (itemType === 'vest') {
     equipVestFromGrid(item, gridItemData.id);
     return;
   }
   
-  if (item.type === 'armor') {
+  if (itemType === 'armor') {
     equipArmorFromGrid(item, gridItemData.id);
     return;
   }
+  
+  console.log(`[Click-to-equip] Unknown item type: "${itemType}" for item:`, item);
 }
 
 function dropGridItemInWorld(gridItemData) {
@@ -4800,22 +4837,23 @@ function showTooltip(item, x, y) {
   tooltip.style.top = (y + 15) + 'px';
   
   let html = `<div class="tooltip-title">${item.icon || '📦'} ${item.name}</div>`;
+  const itemType = normalizeItemType(item);
   
-  if (item.type === 'weapon') {
+  if (isWeaponItem(item)) {
     html += `<div class="tooltip-stat"><span>Damage:</span><span>${item.damage}</span></div>`;
     html += `<div class="tooltip-stat"><span>Range:</span><span>${item.aimRange}</span></div>`;
     html += `<div class="tooltip-stat"><span>Magazine:</span><span>${item.magSize}</span></div>`;
     html += `<div class="tooltip-stat"><span>Fire Rate:</span><span>${Math.round(1000/item.cooldown)}/s</span></div>`;
-  } else if (item.type === 'magazine') {
+  } else if (itemType === 'magazine') {
     html += `<div class="tooltip-stat"><span>Ammo:</span><span>${item.currentAmmo}/${item.capacity}</span></div>`;
     html += `<div class="tooltip-stat"><span>Type:</span><span>${item.ammoType}</span></div>`;
-  } else if (item.type === 'ammoBox') {
+  } else if (itemType === 'ammobox') {
     html += `<div class="tooltip-stat"><span>Amount:</span><span>${item.amount} rounds</span></div>`;
     html += `<div class="tooltip-stat"><span>Type:</span><span>${item.ammoType}</span></div>`;
-  } else if (item.type === 'backpack') {
+  } else if (itemType === 'backpack') {
     html += `<div class="tooltip-stat"><span>Size:</span><span>${item.cols}x${item.rows}</span></div>`;
     html += `<div class="tooltip-stat"><span>Capacity:</span><span>${item.cols * item.rows} cells</span></div>`;
-  } else if (item.type === 'vest') {
+  } else if (itemType === 'vest') {
     html += `<div class="tooltip-stat"><span>Mag Slots:</span><span>${item.magSlots}</span></div>`;
     if (item.protection !== undefined) {
       html += `<div class="tooltip-stat"><span>Protection:</span><span>${item.protection}%</span></div>`;
