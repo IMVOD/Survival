@@ -22,7 +22,97 @@
       color:#e9eef8;
       overflow:hidden;
     }
-    canvas { display:block; width:100vw; height:100vh; background:#0a0e14; cursor:crosshair; }
+    canvas { display:none; width:100vw; height:100vh; background:#0a0e14; cursor:crosshair; }
+    canvas.game-started { display:block; }
+
+    /* Hide game HUD elements initially */
+    #hud, #topHud, #controls, #minimap, #buttonPanel {
+      display: none !important;
+    }
+    body.game-started #hud,
+    body.game-started #topHud,
+    body.game-started #controls,
+    body.game-started #minimap,
+    body.game-started #buttonPanel {
+      display: flex !important;
+    }
+    body.game-started #controls {
+      display: block !important;
+    }
+
+    /* Loading Screen */
+    #loadingScreen {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+      opacity: 1;
+      transition: opacity 1s ease-out;
+    }
+    #loadingScreen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #loadingScreen svg {
+      width: 100vw;
+      height: auto;
+    }
+
+    /* Main Menu Screen */
+    #mainMenu {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 1s ease-in;
+    }
+    #mainMenu.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #mainMenu.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #mainMenuTitle {
+      margin-bottom: 60px;
+      animation: titlePulse 2s ease-in-out infinite;
+    }
+    @keyframes titlePulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    #playButton {
+      padding: 20px 60px;
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, rgba(255,0,0,0.9), rgba(200,0,0,0.9));
+      color: #fff;
+      border: 3px solid #ff0000;
+      cursor: pointer;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      box-shadow: 0 0 30px rgba(255,0,0,0.6);
+      transition: all 0.3s;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+    }
+    #playButton:hover {
+      background: linear-gradient(135deg, rgba(255,0,0,1), rgba(220,0,0,1));
+      box-shadow: 0 0 50px rgba(255,0,0,0.9);
+      transform: scale(1.1);
+    }
+    #playButton:active {
+      transform: scale(1.05);
+    }
 
     /* Damage Indicator */
     #damageIndicator {
@@ -546,6 +636,70 @@
   </style>
 </head>
 <body>
+  <!-- Loading Screen -->
+  <div id="loadingScreen">
+    <svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+      <!-- Glow Filter -->
+      <defs>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="blur"/>
+          <feMerge>
+            <feMergeNode in="blur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+
+      <!-- Group everything for fade-out -->
+      <g id="logoGroup" opacity="1">
+        <!-- Background -->
+        <rect width="300" height="200" fill="#000000" />
+
+        <!-- Top Chevron -->
+        <polygon id="chevron1" points="110,40 150,85 190,40 175,40 150,75 125,40" fill="#FF0000" opacity="0" filter="url(#glow)">
+          <animate attributeName="opacity" from="0" to="1" dur="0.6s" begin="0s" fill="freeze"/>
+          <animate attributeName="opacity" values="1;0.85;1" dur="1.2s" repeatCount="indefinite" begin="0.6s"/>
+        </polygon>
+
+        <!-- Bottom Chevron -->
+        <polygon id="chevron2" points="110,75 150,120 190,75 175,75 150,110 125,75" fill="#FF0000" opacity="0" filter="url(#glow)">
+          <animate attributeName="opacity" from="0" to="1" dur="0.6s" begin="0.6s" fill="freeze"/>
+          <animate attributeName="opacity" values="1;0.85;1" dur="1.2s" repeatCount="indefinite" begin="1.2s"/>
+        </polygon>
+
+        <!-- VANGUARD Text -->
+        <text id="vanguardText" x="150" y="145" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#FF0000" text-anchor="middle" opacity="0">
+          VANGUARD
+          <animate attributeName="opacity" from="0" to="1" dur="1s" begin="1.2s" fill="freeze"/>
+        </text>
+
+        <!-- Red Line -->
+        <line id="redLine" x1="95" y1="155" x2="205" y2="155" stroke="#FF0000" stroke-width="3" stroke-dasharray="110" stroke-dashoffset="110">
+          <animate attributeName="stroke-dashoffset" from="110" to="0" dur="0.8s" begin="2.2s" fill="freeze"/>
+        </line>
+
+        <!-- INDUSTRIES Text -->
+        <text id="industriesText" x="150" y="175" font-family="Arial, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle" opacity="0">
+          INDUSTRIES
+          <animate attributeName="opacity" from="0" to="1" dur="1s" begin="3s" fill="freeze"/>
+        </text>
+
+        <!-- Fade-out for entire logo group -->
+        <animate attributeName="opacity" from="1" to="0" dur="1s" begin="5s" fill="freeze"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Main Menu Screen -->
+  <div id="mainMenu">
+    <div id="mainMenuTitle">
+      <svg width="400" height="80" viewBox="0 0 400 80" xmlns="http://www.w3.org/2000/svg">
+        <text x="200" y="55" font-family="Arial, sans-serif" font-size="42" font-weight="bold" fill="#FF0000" text-anchor="middle" letter-spacing="4">RED SECTOR</text>
+      </svg>
+    </div>
+    <button id="playButton">PLAY</button>
+  </div>
+
   <canvas id="canvas"></canvas>
 
   <!-- Damage Indicator -->
@@ -5037,24 +5191,54 @@ function setupStartingLoadout() {
       requestAnimationFrame(loop);
     }
 
-    // Initialize game
-    generateTerrain();
-    generateBuildings();
-    generateDecorations();
-    spawnInitialZombies(); // NEW: Spawn initial zombies on streets
-    
-    // Initialize Tarkov inventory system
-    initializeBackpackGrid();
-    initializeMagazineSlots();
-    setupStartingLoadout();
-    setupDragAndDrop();
-    setupEquipmentSlots();
-    setupMagazineSlots();
-    setupGridItemHandlers();
-    setupTooltips();
-    
-    updateHUD();
-    requestAnimationFrame(loop);
+    // Initialize game function (to be called after Play button is clicked)
+    function initializeGame() {
+      // Show game canvas and HUD
+      document.body.classList.add('game-started');
+      document.getElementById('canvas').classList.add('game-started');
+      
+      generateTerrain();
+      generateBuildings();
+      generateDecorations();
+      spawnInitialZombies(); // NEW: Spawn initial zombies on streets
+      
+      // Initialize Tarkov inventory system
+      initializeBackpackGrid();
+      initializeMagazineSlots();
+      setupStartingLoadout();
+      setupDragAndDrop();
+      setupEquipmentSlots();
+      setupMagazineSlots();
+      setupGridItemHandlers();
+      setupTooltips();
+      
+      updateHUD();
+      requestAnimationFrame(loop);
+    }
+
+    // Loading screen and main menu logic
+    const loadingScreen = document.getElementById('loadingScreen');
+    const mainMenu = document.getElementById('mainMenu');
+    const playButton = document.getElementById('playButton');
+
+    // Hide loading screen after 6 seconds and show main menu
+    setTimeout(() => {
+      loadingScreen.classList.add('hidden');
+      setTimeout(() => {
+        mainMenu.classList.add('visible');
+      }, 1000); // Wait for fade-out to complete
+    }, 6000);
+
+    // Play button click handler
+    playButton.addEventListener('click', () => {
+      mainMenu.classList.remove('visible');
+      mainMenu.classList.add('hidden');
+      
+      // Start the game after menu fades out
+      setTimeout(() => {
+        initializeGame();
+      }, 1000);
+    });
   </script>
 </body>
 </html>
