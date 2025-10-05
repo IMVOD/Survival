@@ -116,6 +116,91 @@
     #playButton:active {
       transform: scale(1.05);
     }
+    
+    /* Profile/Stats Button */
+    #profileButton {
+      padding: 15px 45px;
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(135deg, rgba(255,0,0,0.9), rgba(200,0,0,0.9));
+      color: #fff;
+      border: 3px solid #ff0000;
+      cursor: pointer;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      box-shadow: 0 0 30px rgba(255,0,0,0.6);
+      transition: all 0.3s;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-top: 20px;
+    }
+    #profileButton:hover {
+      background: linear-gradient(135deg, rgba(255,0,0,1), rgba(220,0,0,1));
+      box-shadow: 0 0 50px rgba(255,0,0,0.9);
+      transform: scale(1.1);
+    }
+    #profileButton:active {
+      transform: scale(1.05);
+    }
+    
+    /* Profile/Stats Modal */
+    #profileModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10001;
+    }
+    #profileModal.active {
+      display: flex;
+    }
+    .profile-panel {
+      background: var(--panel-bg);
+      border: 2px solid rgba(255,0,0,0.4);
+      padding: 40px;
+      max-width: 600px;
+      box-shadow: 0 0 40px rgba(255,0,0,0.3);
+      clip-path: polygon(2% 0, 100% 0, 100% 98%, 98% 100%, 0 100%, 0 2%);
+      text-align: center;
+    }
+    .profile-header {
+      font-size: 32px;
+      font-weight: 900;
+      margin-bottom: 24px;
+      color: #ff0000;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .profile-content {
+      font-size: 18px;
+      color: #c8d9ee;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+    .profile-close {
+      margin-top: 20px;
+    }
+    .profile-close .btn {
+      padding: 12px 30px;
+      background: linear-gradient(135deg, rgba(255,0,0,0.15), rgba(255,0,0,0.05));
+      border: 2px solid rgba(255,0,0,0.4);
+      color: #ff0000;
+      font-weight: 900;
+      cursor: pointer;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      box-shadow: 0 0 10px rgba(255,0,0,0.2);
+    }
+    .profile-close .btn:hover {
+      background: linear-gradient(135deg, rgba(255,0,0,0.3), rgba(255,0,0,0.15));
+      border-color: rgba(255,0,0,0.6);
+      box-shadow: 0 0 20px rgba(255,0,0,0.4);
+      transform: scale(1.05);
+    }
 
     /* Damage Indicator */
     #damageIndicator {
@@ -701,6 +786,22 @@
       </svg>
     </div>
     <button id="playButton">PLAY</button>
+    <button id="profileButton">PROFILE / STATS</button>
+  </div>
+
+  <!-- Profile/Stats Modal -->
+  <div id="profileModal">
+    <div class="profile-panel">
+      <div class="profile-header">🎯 PLAYER PROFILE & STATS</div>
+      <div class="profile-content">
+        Player Profile & Stats coming soon.<br><br>
+        This section will display your achievements,<br>
+        statistics, and progression.
+      </div>
+      <div class="profile-close">
+        <button class="btn" onclick="closeProfileModal()">CLOSE</button>
+      </div>
+    </div>
   </div>
 
   <canvas id="canvas"></canvas>
@@ -5223,6 +5324,8 @@ function setupStartingLoadout() {
     const loadingScreen = document.getElementById('loadingScreen');
     const mainMenu = document.getElementById('mainMenu');
     const playButton = document.getElementById('playButton');
+    const profileButton = document.getElementById('profileButton');
+    const profileModal = document.getElementById('profileModal');
 
     // Hide loading screen after 6 seconds and show main menu
     setTimeout(() => {
@@ -5241,6 +5344,23 @@ function setupStartingLoadout() {
       setTimeout(() => {
         initializeGame();
       }, 1000);
+    });
+
+    // Profile/Stats button click handler
+    profileButton.addEventListener('click', () => {
+      profileModal.classList.add('active');
+    });
+
+    // Close profile modal function
+    function closeProfileModal() {
+      profileModal.classList.remove('active');
+    }
+
+    // Close modal when clicking outside the panel
+    profileModal.addEventListener('click', (e) => {
+      if (e.target === profileModal) {
+        closeProfileModal();
+      }
     });
   </script>
 </body>
