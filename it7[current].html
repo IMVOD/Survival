@@ -40,6 +40,52 @@
       display: block !important;
     }
 
+    /* Launch Button Screen */
+    #launchScreen {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10002;
+      opacity: 1;
+      transition: opacity 1s ease-out;
+    }
+    #launchScreen.hidden {
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+    #launchButton {
+      padding: 25px 80px;
+      font-size: 36px;
+      font-weight: 900;
+      background: linear-gradient(135deg, rgba(255,0,0,0.9), rgba(200,0,0,0.9));
+      color: #fff;
+      border: 4px solid #ff0000;
+      cursor: pointer;
+      clip-path: polygon(8% 0, 100% 0, 100% 92%, 92% 100%, 0 100%, 0 8%);
+      box-shadow: 0 0 40px rgba(255,0,0,0.8);
+      transition: all 0.3s;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      animation: launchPulse 2s ease-in-out infinite;
+    }
+    @keyframes launchPulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(255,0,0,0.8); }
+      50% { transform: scale(1.08); box-shadow: 0 0 60px rgba(255,0,0,1); }
+    }
+    #launchButton:hover {
+      background: linear-gradient(135deg, rgba(255,0,0,1), rgba(220,0,0,1));
+      box-shadow: 0 0 70px rgba(255,0,0,1);
+      transform: scale(1.12);
+      animation: none;
+    }
+    #launchButton:active {
+      transform: scale(1.05);
+    }
+
     /* Loading Screen */
     #loadingScreen {
       position: fixed;
@@ -49,8 +95,13 @@
       justify-content: center;
       align-items: center;
       z-index: 10001;
-      opacity: 1;
+      opacity: 0;
+      pointer-events: none;
       transition: opacity 1s ease-out;
+    }
+    #loadingScreen.visible {
+      opacity: 1;
+      pointer-events: auto;
     }
     #loadingScreen.hidden {
       opacity: 0;
@@ -728,6 +779,11 @@
   <audio id="bgMusic" loop>
     <source src="Ominous Gate (1).mp3" type="audio/mpeg">
   </audio>
+
+  <!-- Launch Screen -->
+  <div id="launchScreen">
+    <button id="launchButton">LAUNCH</button>
+  </div>
 
   <!-- Loading Screen -->
   <div id="loadingScreen">
@@ -5326,6 +5382,8 @@ function setupStartingLoadout() {
     }
 
     // Loading screen and main menu logic
+    const launchScreen = document.getElementById('launchScreen');
+    const launchButton = document.getElementById('launchButton');
     const loadingScreen = document.getElementById('loadingScreen');
     const mainMenu = document.getElementById('mainMenu');
     const playButton = document.getElementById('playButton');
@@ -5333,28 +5391,28 @@ function setupStartingLoadout() {
     const profileModal = document.getElementById('profileModal');
     const bgMusic = document.getElementById('bgMusic');
 
-    // Start background music when page loads
-    // Using a user interaction fallback for autoplay policy
-    const startBackgroundMusic = () => {
+    // Launch button click handler
+    launchButton.addEventListener('click', () => {
+      // Hide launch screen
+      launchScreen.classList.add('hidden');
+      
+      // Start background music
       bgMusic.play().catch(err => {
-        console.log('Autoplay prevented, waiting for user interaction');
-        // Try to play on first user interaction
-        document.addEventListener('click', () => {
-          bgMusic.play();
-        }, { once: true });
+        console.log('Music playback error:', err);
       });
-    };
-
-    // Start music immediately
-    startBackgroundMusic();
-
-    // Hide loading screen after 6 seconds and show main menu
-    setTimeout(() => {
-      loadingScreen.classList.add('hidden');
+      
+      // Show and start loading animation
+      loadingScreen.classList.add('visible');
+      
+      // Hide loading screen after 6 seconds and show main menu
       setTimeout(() => {
-        mainMenu.classList.add('visible');
-      }, 1000); // Wait for fade-out to complete
-    }, 6000);
+        loadingScreen.classList.remove('visible');
+        loadingScreen.classList.add('hidden');
+        setTimeout(() => {
+          mainMenu.classList.add('visible');
+        }, 1000); // Wait for fade-out to complete
+      }, 6000);
+    });
 
     // Play button click handler
     playButton.addEventListener('click', () => {
