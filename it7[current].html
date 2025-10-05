@@ -724,6 +724,11 @@
   </style>
 </head>
 <body>
+  <!-- Background Music -->
+  <audio id="bgMusic" loop>
+    <source src="Ominous Gate (1).mp3" type="audio/mpeg">
+  </audio>
+
   <!-- Loading Screen -->
   <div id="loadingScreen">
     <svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
@@ -5326,6 +5331,22 @@ function setupStartingLoadout() {
     const playButton = document.getElementById('playButton');
     const profileButton = document.getElementById('profileButton');
     const profileModal = document.getElementById('profileModal');
+    const bgMusic = document.getElementById('bgMusic');
+
+    // Start background music when page loads
+    // Using a user interaction fallback for autoplay policy
+    const startBackgroundMusic = () => {
+      bgMusic.play().catch(err => {
+        console.log('Autoplay prevented, waiting for user interaction');
+        // Try to play on first user interaction
+        document.addEventListener('click', () => {
+          bgMusic.play();
+        }, { once: true });
+      });
+    };
+
+    // Start music immediately
+    startBackgroundMusic();
 
     // Hide loading screen after 6 seconds and show main menu
     setTimeout(() => {
@@ -5337,6 +5358,10 @@ function setupStartingLoadout() {
 
     // Play button click handler
     playButton.addEventListener('click', () => {
+      // Stop and reset background music
+      bgMusic.pause();
+      bgMusic.currentTime = 0;
+      
       mainMenu.classList.remove('visible');
       mainMenu.classList.add('hidden');
       
