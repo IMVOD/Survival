@@ -1,0 +1,87 @@
+SVG loading screen, 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vanguard Industries Logo</title>
+  <style>
+    body {
+      background-color: black;
+      margin: 0;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+    }
+    svg {
+      width: 100vw;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+
+<svg viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Glow Filter -->
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Group everything for fade-out -->
+  <g id="logoGroup" opacity="1">
+    <!-- Background -->
+    <rect width="300" height="200" fill="#000000" />
+
+    <!-- Top Chevron -->
+    <polygon id="chevron1" points="110,40 150,85 190,40 175,40 150,75 125,40" fill="#FF0000" opacity="0" filter="url(#glow)">
+      <animate attributeName="opacity" from="0" to="1" dur="0.6s" begin="0s" fill="freeze"/>
+      <animate attributeName="opacity" values="1;0.85;1" dur="1.2s" repeatCount="indefinite" begin="0.6s"/>
+    </polygon>
+
+    <!-- Bottom Chevron -->
+    <polygon id="chevron2" points="110,75 150,120 190,75 175,75 150,110 125,75" fill="#FF0000" opacity="0" filter="url(#glow)">
+      <animate attributeName="opacity" from="0" to="1" dur="0.6s" begin="0.6s" fill="freeze"/>
+      <animate attributeName="opacity" values="1;0.85;1" dur="1.2s" repeatCount="indefinite" begin="1.2s"/>
+    </polygon>
+
+    <!-- VANGUARD Text -->
+    <text id="vanguardText" x="150" y="145" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#FF0000" text-anchor="middle" opacity="0">
+      VANGUARD
+      <animate attributeName="opacity" from="0" to="1" dur="1s" begin="1.2s" fill="freeze"/>
+    </text>
+
+    <!-- Red Line -->
+    <line id="redLine" x1="95" y1="155" x2="205" y2="155" stroke="#FF0000" stroke-width="3" stroke-dasharray="110" stroke-dashoffset="110">
+      <animate attributeName="stroke-dashoffset" from="110" to="0" dur="0.8s" begin="2.2s" fill="freeze"/>
+    </line>
+
+    <!-- INDUSTRIES Text -->
+    <text id="industriesText" x="150" y="175" font-family="Arial, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle" opacity="0">
+      INDUSTRIES
+      <animate attributeName="opacity" from="0" to="1" dur="1s" begin="3s" fill="freeze"/>
+    </text>
+
+    <!-- Fade-out for entire logo group -->
+    <animate attributeName="opacity" from="1" to="0" dur="1s" begin="5s" fill="freeze"/>
+  </g>
+</svg>
+
+</body>
+</html>
+SVG play screen title
+<svg width="300" height="60" viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background transparent for overlay on game screen -->
+  <rect width="300" height="60" fill="transparent" />
+
+  <!-- Game Title -->
+  <text x="150" y="40" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#FF0000" text-anchor="middle" letter-spacing="2">RED SECTOR</text>
+</svg>
