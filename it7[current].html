@@ -1099,8 +1099,15 @@
     let sharedConvolver = null;
     let sharedImpulseBuffer = null;
 
+    // AUDIO PRELOAD SYSTEM: Preload all sound effects once at game start for minimal latency
+    // This approach creates Audio objects once and reuses them by resetting currentTime to 0
+    // before each play() call, eliminating the overhead of creating new Audio objects on each event.
+    // Benefits:
+    // - Reduced latency for rapid-fire events (pistol shots, reload sounds)
+    // - Lower memory usage (no duplicate Audio objects)
+    // - Better performance during intensive gameplay moments
+    
     // Preload pistol sound files
-    // AUDIO FIX: Updated paths to use correct files from root directory with proper extensions
     // - pistol.mp3: Starter pistol shot sound (root directory)
     // - mag.wav: Magazine reload sound (root directory, WAV format)
     // - chamber.wav: Chamber reload sound (root directory, WAV format)
@@ -1110,11 +1117,20 @@
       chamber: new Audio('chamber.wav')
     };
     
-    // Preload all pistol sounds
+    // Preload all pistol sounds by setting preload attribute and calling load()
+    // This ensures audio files are downloaded and ready before any gameplay events
     Object.values(pistolSounds).forEach(audio => {
       audio.preload = 'auto';
       audio.load();
     });
+    
+    // Preload background music for seamless looping
+    // The background music is accessed via DOM element but we ensure it's preloaded
+    const bgMusicElement = document.getElementById('bgMusic');
+    if (bgMusicElement) {
+      bgMusicElement.preload = 'auto';
+      bgMusicElement.load();
+    }
 
     function initAudio() {
       if (sharedImpulseBuffer) return;
@@ -1146,12 +1162,12 @@
       const volumeMult = Math.max(0.1, 1 - (distance / maxDist));
       
       if (type === 'shoot') {
-        // Special handling for starter pistol: play MP3 file
-        // AUDIO FIX: Uses pistol.mp3 from root directory (updated from files/pistol.mp3)
+        // PRELOAD PATTERN: For starter pistol, reset currentTime and play the preloaded audio
+        // This eliminates latency from creating new Audio objects and enables rapid-fire responsiveness
         if (weaponType === 'pistol') {
-          const pistolShoot = pistolSounds.shoot.cloneNode();
-          pistolShoot.volume = 0.6 * volumeMult;
-          pistolShoot.play().catch(err => console.log('Pistol sound play error:', err));
+          pistolSounds.shoot.currentTime = 0; // Reset to start for rapid-fire support
+          pistolSounds.shoot.volume = 0.6 * volumeMult;
+          pistolSounds.shoot.play().catch(err => console.log('Pistol sound play error:', err));
           return;
         }
         
@@ -2498,20 +2514,19 @@
       weapon.reloadStart = performance.now();
       weapon.reloadMagIndex = magIndex;
       
-      // Special handling for starter pistol: play custom reload sounds
-      // AUDIO FIX: Uses mag.wav and chamber.wav from root directory with correct extensions
-      // (updated from files/mag.mp3 and files/chamber.mp3)
+      // PRELOAD PATTERN: For starter pistol reload, reset currentTime and play preloaded sounds
+      // This ensures responsive audio during rapid reload sequences without creating new Audio objects
       if (weapon.id === 'pistol') {
-        // Play mag sound immediately (mag.wav)
-        const magSound = pistolSounds.mag.cloneNode();
-        magSound.volume = 0.5;
-        magSound.play().catch(err => console.log('Mag sound play error:', err));
+        // Play mag sound immediately (mag.wav) - reset and play preloaded audio
+        pistolSounds.mag.currentTime = 0;
+        pistolSounds.mag.volume = 0.5;
+        pistolSounds.mag.play().catch(err => console.log('Mag sound play error:', err));
         
-        // Play chamber sound after 1.3 seconds (chamber.wav)
+        // Play chamber sound after 1.3 seconds (chamber.wav) - reset and play preloaded audio
         setTimeout(() => {
-          const chamberSound = pistolSounds.chamber.cloneNode();
-          chamberSound.volume = 0.5;
-          chamberSound.play().catch(err => console.log('Chamber sound play error:', err));
+          pistolSounds.chamber.currentTime = 0;
+          pistolSounds.chamber.volume = 0.5;
+          pistolSounds.chamber.play().catch(err => console.log('Chamber sound play error:', err));
         }, 1300);
       } else {
         // Use default reload sound for other weapons
@@ -5442,7 +5457,9 @@ function setupStartingLoadout() {
       // Hide launch screen
       launchScreen.classList.add('hidden');
       
-      // Start background music
+      // PRELOAD PATTERN: Start background music from beginning using preloaded audio
+      // The bgMusic element was preloaded at game start, ensuring immediate playback
+      bgMusic.currentTime = 0; // Reset to start for consistent experience
       bgMusic.play().catch(err => {
         console.log('Music playback error:', err);
       });
@@ -5462,7 +5479,8 @@ function setupStartingLoadout() {
 
     // Play button click handler
     playButton.addEventListener('click', () => {
-      // Stop and reset background music
+      // PRELOAD PATTERN: Stop and reset background music to beginning
+      // Using currentTime = 0 ensures the music starts from the beginning next time
       bgMusic.pause();
       bgMusic.currentTime = 0;
       
