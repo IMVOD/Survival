@@ -2822,12 +2822,31 @@
     }
 
     function draw() {
-      // RENDERING ORDER STRATEGY:
-      // 1. WORLD LAYER: Terrain, buildings, zombies, player, etc. (with camera transformation)
-      // 2. FOG LAYER: Night fog overlay (in screen space, covers world but not UI)
-      // 3. FLASHLIGHT LAYER: Optional flashlight effect (in screen space)
-      // 4. UI LAYER: Crosshair, minimap, HUD (always on top, in screen space)
-      // This order ensures fog obscures world elements while keeping UI visible
+      // RENDERING ORDER STRATEGY (Fixed and Clarified):
+      // 1. WORLD LAYER: Terrain, buildings, zombies, player, etc.
+      //    - Drawn with camera transformation (ctx.save() -> ctx.translate() -> ctx.restore())
+      //    - Affected by day/night brightness via ctx.globalAlpha
+      //    - All world objects are drawn in world coordinates
+      // 
+      // 2. FOG LAYER: Night fog overlay
+      //    - Drawn AFTER ctx.restore() to operate in screen space
+      //    - Covers entire viewport with semi-transparent overlay
+      //    - Obscures all world elements (zombies, player, terrain) during night
+      //    - Does NOT affect minimap (separate canvas) or other UI elements
+      //
+      // 3. FLASHLIGHT LAYER: Optional flashlight effect
+      //    - Drawn in screen space after fog
+      //    - Uses composite operations to create visibility cone
+      //
+      // 4. UI LAYER: Crosshair, minimap, HUD
+      //    - Drawn in screen space, always on top
+      //    - Minimap uses separate canvas context (mmCtx), completely independent
+      //    - Never affected by fog, brightness, or world transformations
+      //
+      // This layering ensures:
+      // - Fog properly obscures world objects during night/dusk/dawn
+      // - UI elements (especially minimap) remain fully visible at all times
+      // - Clear separation between world space and screen space rendering
       
       ctx.fillStyle = '#0a0e14';
       ctx.fillRect(0, 0, W, H);
@@ -2836,7 +2855,32 @@
       ctx.save();
       ctx.translate(W/2 - camera.x, H/2 - camera.y);
 
-      // Day/Night cycle with enhanced lighting
+      // Day/Night cycle with enhanced lighting and fog
+      //
+      // FOG BEHAVIOR BY TIME OF DAY:
+      // - Night (hour < 6 or >= 20): brightness = 0.25, fogAlpha = 0.3
+      //   * World dimmed significantly
+      //   * Heavy fog obscures zombies and world objects
+      //   * Makes navigation and combat more challenging
+      //
+      // - Dawn transition (6-8): brightness increases 0.25 -> 1.0, fogAlpha decreases 0.3 -> 0
+      //   * Gradual brightening of world
+      //   * Fog gradually lifts, improving visibility
+      //
+      // - Day (8-18): brightness = 1.0, fogAlpha = 0
+      //   * Full visibility, no fog
+      //   * All world objects clearly visible
+      //   * Optimal combat and navigation conditions
+      //
+      // - Dusk transition (18-20): brightness decreases 1.0 -> 0.25, fogAlpha increases 0 -> 0.3
+      //   * Gradual dimming of world
+      //   * Fog gradually returns, reducing visibility
+      //
+      // IMPLEMENTATION NOTES:
+      // - 'brightness' affects world layer rendering via ctx.globalAlpha
+      // - 'fogAlpha' controls fog overlay drawn in screen space after world layer
+      // - Both work together to create day/night atmosphere
+      // - Neither affects UI elements (minimap, HUD) which remain fully visible
       const hour = 6 + (dayTime / DAY_LENGTH) * 24;
       let brightness = 1;
       let fogAlpha = 0;
@@ -3114,10 +3158,24 @@
       ctx.restore();
 
       // FOG LAYER: Draw night fog effect AFTER restoring camera transform
-      // This ensures fog is drawn in screen space, covering all world elements (zombies, player, etc.)
-      // but appears BEFORE UI elements like minimap and HUD which are drawn later
-      // Drawing in screen space (after ctx.restore) ensures the fog covers the entire viewport
-      // regardless of camera position, and prevents any z-fighting or layering issues
+      // 
+      // WHY THIS WORKS:
+      // - ctx.restore() exits world coordinate space and returns to screen space
+      // - The fog is drawn as a semi-transparent rectangle covering the entire viewport
+      // - Since it's drawn in screen space (after ctx.restore()), it covers ALL world objects:
+      //   * Zombies (drawn in world layer)
+      //   * Player (drawn in world layer)
+      //   * Terrain and buildings (drawn in world layer)
+      // - The fog alpha varies by time of day:
+      //   * Night (hour < 6 or >= 20): fogAlpha = 0.3 (dark, obscuring)
+      //   * Dawn (6-8): fogAlpha gradually decreases (0.3 -> 0)
+      //   * Day (8-18): fogAlpha = 0 (no fog, clear visibility)
+      //   * Dusk (18-20): fogAlpha gradually increases (0 -> 0.3)
+      // - This fog does NOT affect:
+      //   * Minimap (drawn on separate canvas mmCtx)
+      //   * HUD elements (drawn after fog layer)
+      //   * Crosshair (drawn after fog layer)
+      // - Drawing fog in screen space ensures consistent coverage regardless of camera position
       if (fogAlpha > 0) {
         ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
         ctx.fillRect(0, 0, W, H);
@@ -3152,7 +3210,19 @@
       }
 
       // UI LAYER: Draw UI elements (crosshair, minimap, HUD, etc.)
-      // These are drawn in screen space and always appear on top of fog and game world
+      // 
+      // IMPORTANT: All UI elements are drawn in screen space and always appear on top of:
+      // - Fog layer
+      // - World layer (game objects, zombies, terrain)
+      // - Flashlight effects
+      //
+      // The minimap is especially protected because:
+      // - It uses a separate canvas element (#minimapCanvas) with its own context (mmCtx)
+      // - The minimap canvas has z-index:40 in CSS, ensuring it's above the main game canvas
+      // - Fog drawn on main canvas (ctx) cannot affect minimap canvas (mmCtx)
+      // - Camera transformations on main canvas don't affect minimap rendering
+      // - This architectural separation guarantees minimap visibility at all times
+      
       // Draw crosshair
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(0,255,136,0.6)';
@@ -3166,6 +3236,7 @@
       ctx.lineTo(mouse.x, mouse.y + 12);
       ctx.stroke();
 
+      // Draw minimap (on separate canvas, fully independent of main canvas fog/transformations)
       drawMinimap();
     }
 
@@ -3195,6 +3266,20 @@
     }
 
     function drawMinimap() {
+      // MINIMAP RENDERING - INDEPENDENT CANVAS SYSTEM
+      // 
+      // This function draws the minimap on a SEPARATE canvas (#minimapCanvas) using mmCtx.
+      // Key architectural benefits:
+      // 1. Completely independent of main game canvas (ctx)
+      // 2. Not affected by main canvas transformations (camera, ctx.save/restore)
+      // 3. Not affected by main canvas fog, brightness, or composite operations
+      // 4. Always renders at full opacity regardless of game time or weather
+      // 5. CSS z-index ensures it stays on top of the game canvas
+      //
+      // This separation ensures the minimap is ALWAYS visible and functional,
+      // providing crucial navigation information even during night fog or other
+      // visual effects that obscure the main game view.
+      
       mmCtx.fillStyle = '#000';
       mmCtx.fillRect(0, 0, 220, 220);
 
