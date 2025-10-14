@@ -776,6 +776,7 @@
 </head>
 <body>
   <!-- Background Music -->
+  <!-- AUDIO FIX: Uses 'Ominous Gate (1).mp3' from root directory - path is correct -->
   <audio id="bgMusic" loop>
     <source src="Ominous Gate (1).mp3" type="audio/mpeg">
   </audio>
@@ -1099,10 +1100,14 @@
     let sharedImpulseBuffer = null;
 
     // Preload pistol sound files
+    // AUDIO FIX: Updated paths to use correct files from root directory with proper extensions
+    // - pistol.mp3: Starter pistol shot sound (root directory)
+    // - mag.wav: Magazine reload sound (root directory, WAV format)
+    // - chamber.wav: Chamber reload sound (root directory, WAV format)
     const pistolSounds = {
-      shoot: new Audio('files/pistol.mp3'),
-      mag: new Audio('files/mag.mp3'),
-      chamber: new Audio('files/chamber.mp3')
+      shoot: new Audio('pistol.mp3'),
+      mag: new Audio('mag.wav'),
+      chamber: new Audio('chamber.wav')
     };
     
     // Preload all pistol sounds
@@ -1142,6 +1147,7 @@
       
       if (type === 'shoot') {
         // Special handling for starter pistol: play MP3 file
+        // AUDIO FIX: Uses pistol.mp3 from root directory (updated from files/pistol.mp3)
         if (weaponType === 'pistol') {
           const pistolShoot = pistolSounds.shoot.cloneNode();
           pistolShoot.volume = 0.6 * volumeMult;
@@ -2493,13 +2499,15 @@
       weapon.reloadMagIndex = magIndex;
       
       // Special handling for starter pistol: play custom reload sounds
+      // AUDIO FIX: Uses mag.wav and chamber.wav from root directory with correct extensions
+      // (updated from files/mag.mp3 and files/chamber.mp3)
       if (weapon.id === 'pistol') {
-        // Play mag sound immediately
+        // Play mag sound immediately (mag.wav)
         const magSound = pistolSounds.mag.cloneNode();
         magSound.volume = 0.5;
         magSound.play().catch(err => console.log('Mag sound play error:', err));
         
-        // Play chamber sound after 1.3 seconds
+        // Play chamber sound after 1.3 seconds (chamber.wav)
         setTimeout(() => {
           const chamberSound = pistolSounds.chamber.cloneNode();
           chamberSound.volume = 0.5;
