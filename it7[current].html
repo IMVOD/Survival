@@ -1098,6 +1098,19 @@
     let sharedConvolver = null;
     let sharedImpulseBuffer = null;
 
+    // Preload pistol sound files
+    const pistolSounds = {
+      shoot: new Audio('files/pistol.mp3'),
+      mag: new Audio('files/mag.mp3'),
+      chamber: new Audio('files/chamber.mp3')
+    };
+    
+    // Preload all pistol sounds
+    Object.values(pistolSounds).forEach(audio => {
+      audio.preload = 'auto';
+      audio.load();
+    });
+
     function initAudio() {
       if (sharedImpulseBuffer) return;
       
@@ -1128,6 +1141,14 @@
       const volumeMult = Math.max(0.1, 1 - (distance / maxDist));
       
       if (type === 'shoot') {
+        // Special handling for starter pistol: play MP3 file
+        if (weaponType === 'pistol') {
+          const pistolShoot = pistolSounds.shoot.cloneNode();
+          pistolShoot.volume = 0.6 * volumeMult;
+          pistolShoot.play().catch(err => console.log('Pistol sound play error:', err));
+          return;
+        }
+        
         // Enhanced realistic gunshot: layered noise bursts with better "pff pff" characteristics
         const master = audioCtx.createGain();
         master.gain.value = 0.25 * volumeMult;
@@ -2470,7 +2491,24 @@
       weapon.reloading = true;
       weapon.reloadStart = performance.now();
       weapon.reloadMagIndex = magIndex;
-      playSound('reload');
+      
+      // Special handling for starter pistol: play custom reload sounds
+      if (weapon.id === 'pistol') {
+        // Play mag sound immediately
+        const magSound = pistolSounds.mag.cloneNode();
+        magSound.volume = 0.5;
+        magSound.play().catch(err => console.log('Mag sound play error:', err));
+        
+        // Play chamber sound after 1.3 seconds
+        setTimeout(() => {
+          const chamberSound = pistolSounds.chamber.cloneNode();
+          chamberSound.volume = 0.5;
+          chamberSound.play().catch(err => console.log('Chamber sound play error:', err));
+        }, 1300);
+      } else {
+        // Use default reload sound for other weapons
+        playSound('reload');
+      }
     }
 
     function updateReload(weapon) {
