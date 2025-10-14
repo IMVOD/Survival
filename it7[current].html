@@ -2822,9 +2822,17 @@
     }
 
     function draw() {
+      // RENDERING ORDER STRATEGY:
+      // 1. WORLD LAYER: Terrain, buildings, zombies, player, etc. (with camera transformation)
+      // 2. FOG LAYER: Night fog overlay (in screen space, covers world but not UI)
+      // 3. FLASHLIGHT LAYER: Optional flashlight effect (in screen space)
+      // 4. UI LAYER: Crosshair, minimap, HUD (always on top, in screen space)
+      // This order ensures fog obscures world elements while keeping UI visible
+      
       ctx.fillStyle = '#0a0e14';
       ctx.fillRect(0, 0, W, H);
 
+      // Start world coordinate space with camera transformation
       ctx.save();
       ctx.translate(W/2 - camera.x, H/2 - camera.y);
 
@@ -3102,16 +3110,22 @@
                  player.y + Math.sin(player.angle) * (player.radius + 8));
       ctx.stroke();
 
-      // RENDERING ORDER FIX: Night fog effect - drawn AFTER all game elements (zombies, player, etc.)
-      // to ensure proper obscuring of entities during night time
-      if (fogAlpha > 0) {
-        ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
-        ctx.fillRect(camera.x - W, camera.y - H, W * 3, H * 3);
-      }
-
+      // End world coordinate space (with camera transformation)
       ctx.restore();
 
-      // Flashlight overlay as a forward cone restoring brightness
+      // FOG LAYER: Draw night fog effect AFTER restoring camera transform
+      // This ensures fog is drawn in screen space, covering all world elements (zombies, player, etc.)
+      // but appears BEFORE UI elements like minimap and HUD which are drawn later
+      // Drawing in screen space (after ctx.restore) ensures the fog covers the entire viewport
+      // regardless of camera position, and prevents any z-fighting or layering issues
+      if (fogAlpha > 0) {
+        ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // FLASHLIGHT LAYER: Flashlight overlay in screen space
+      // Drawn after fog layer but before UI elements
+      // This allows the flashlight to illuminate through the fog
       if (flashlightOn) {
         ctx.save();
         // Darken screen
@@ -3137,6 +3151,8 @@
         ctx.globalCompositeOperation = 'source-over';
       }
 
+      // UI LAYER: Draw UI elements (crosshair, minimap, HUD, etc.)
+      // These are drawn in screen space and always appear on top of fog and game world
       // Draw crosshair
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(0,255,136,0.6)';
