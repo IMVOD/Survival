@@ -245,8 +245,8 @@
       buildings = [];
       const centerX = WORLD_SIZE / 2;
       const centerY = WORLD_SIZE / 2;
-      const urbanRadius = 600; // Dense urban center radius
-      const suburbanRadius = 1200; // Scattered outskirts radius
+      const urbanRadius = 700; // Dense urban center radius (increased)
+      const suburbanRadius = 1400; // Scattered outskirts radius (increased)
 
       // Building piece types for Middle Eastern architecture
       const buildingTypes = {
@@ -271,8 +271,8 @@
 
     // Generate dense urban cluster in the center
     function generateUrbanCluster(centerX, centerY, radius, buildingTypes) {
-      const attempts = 250; // More attempts for dense packing
-      const minSpacing = 25; // Minimum space between buildings (for streets/alleys)
+      const attempts = 300; // More attempts for dense packing
+      const minSpacing = 20; // Minimum space between buildings (for streets/alleys)
 
       for (let i = 0; i < attempts; i++) {
         // Position within urban radius
@@ -308,9 +308,9 @@
 
     // Generate scattered buildings in outskirts
     function generateOutskirtBuildings(centerX, centerY, maxRadius, buildingTypes) {
-      const attempts = 80; // Fewer buildings in outskirts
-      const minSpacing = 80; // More space between outskirt buildings
-      const urbanRadius = 600;
+      const attempts = 100; // Fewer buildings in outskirts
+      const minSpacing = 100; // More space between outskirt buildings
+      const urbanRadius = 700;
 
       for (let i = 0; i < attempts; i++) {
         // Position in outskirts (between urbanRadius and maxRadius)
