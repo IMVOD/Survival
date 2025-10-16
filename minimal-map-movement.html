@@ -129,7 +129,8 @@
         targetY: null,
         state: 'follow',  // 'follow', 'move', 'hold'
         formationOffsetX: -50,
-        formationOffsetY: 50
+        formationOffsetY: 50,
+        facingAngle: 0  // Angle in radians (0 = up/north)
       },
       {
         id: 'op2',
@@ -142,7 +143,8 @@
         targetY: null,
         state: 'follow',
         formationOffsetX: 50,
-        formationOffsetY: 50
+        formationOffsetY: 50,
+        facingAngle: 0
       },
       {
         id: 'op3',
@@ -155,7 +157,8 @@
         targetY: null,
         state: 'follow',
         formationOffsetX: 0,
-        formationOffsetY: 80
+        formationOffsetY: 80,
+        facingAngle: 0
       }
     ];
 
@@ -276,29 +279,64 @@
       }
     }
 
-    // Set squad formation offsets (wedge formation by default)
+    // Set squad formation offsets and facing directions
     function setFormation(formationType) {
-      if (formationType === 'wedge') {
-        squadMembers[0].formationOffsetX = -50;
-        squadMembers[0].formationOffsetY = 50;
-        squadMembers[1].formationOffsetX = 50;
-        squadMembers[1].formationOffsetY = 50;
-        squadMembers[2].formationOffsetX = 0;
-        squadMembers[2].formationOffsetY = 80;
-      } else if (formationType === 'line') {
-        squadMembers[0].formationOffsetX = -60;
+      if (formationType === 'circle') {
+        // Circle Up: Tight defensive circle, members facing outward
+        const radius = 40;
+        squadMembers[0].formationOffsetX = -radius;
         squadMembers[0].formationOffsetY = 0;
-        squadMembers[1].formationOffsetX = 60;
+        squadMembers[0].facingAngle = Math.PI;  // Face left
+        
+        squadMembers[1].formationOffsetX = radius;
         squadMembers[1].formationOffsetY = 0;
+        squadMembers[1].facingAngle = 0;  // Face right
+        
+        squadMembers[2].formationOffsetX = 0;
+        squadMembers[2].formationOffsetY = radius;
+        squadMembers[2].facingAngle = Math.PI / 2;  // Face down
+      } else if (formationType === 'line') {
+        // Line: Shoulder-to-shoulder horizontal line, evenly spaced
+        const spacing = 50;
+        squadMembers[0].formationOffsetX = -spacing;
+        squadMembers[0].formationOffsetY = 0;
+        squadMembers[0].facingAngle = -Math.PI / 2;  // Face up
+        
+        squadMembers[1].formationOffsetX = spacing;
+        squadMembers[1].formationOffsetY = 0;
+        squadMembers[1].facingAngle = -Math.PI / 2;  // Face up
+        
         squadMembers[2].formationOffsetX = 0;
         squadMembers[2].formationOffsetY = 0;
+        squadMembers[2].facingAngle = -Math.PI / 2;  // Face up
       } else if (formationType === 'column') {
+        // Column: Single-file vertical line
+        const spacing = 40;
         squadMembers[0].formationOffsetX = 0;
-        squadMembers[0].formationOffsetY = 40;
+        squadMembers[0].formationOffsetY = spacing;
+        squadMembers[0].facingAngle = -Math.PI / 2;  // Face up
+        
         squadMembers[1].formationOffsetX = 0;
-        squadMembers[1].formationOffsetY = 80;
+        squadMembers[1].formationOffsetY = spacing * 2;
+        squadMembers[1].facingAngle = -Math.PI / 2;  // Face up
+        
         squadMembers[2].formationOffsetX = 0;
-        squadMembers[2].formationOffsetY = 120;
+        squadMembers[2].formationOffsetY = spacing * 3;
+        squadMembers[2].facingAngle = -Math.PI / 2;  // Face up
+      } else if (formationType === 'spread') {
+        // Spread Out: Like Circle Up but with much larger spacing
+        const radius = 80;
+        squadMembers[0].formationOffsetX = -radius;
+        squadMembers[0].formationOffsetY = 0;
+        squadMembers[0].facingAngle = Math.PI;  // Face left
+        
+        squadMembers[1].formationOffsetX = radius;
+        squadMembers[1].formationOffsetY = 0;
+        squadMembers[1].facingAngle = 0;  // Face right
+        
+        squadMembers[2].formationOffsetX = 0;
+        squadMembers[2].formationOffsetY = radius;
+        squadMembers[2].facingAngle = Math.PI / 2;  // Face down
       }
     }
 
@@ -404,12 +442,14 @@
         ctx.arc(member.x, member.y, member.radius, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw direction indicator
+        // Draw direction indicator based on facingAngle
         ctx.strokeStyle = '#4a90e2';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(member.x, member.y);
-        ctx.lineTo(member.x, member.y - member.radius - 8);
+        const dirX = member.x + Math.sin(member.facingAngle) * (member.radius + 8);
+        const dirY = member.y - Math.cos(member.facingAngle) * (member.radius + 8);
+        ctx.lineTo(dirX, dirY);
         ctx.stroke();
 
         // Draw state indicator
@@ -494,7 +534,7 @@
         { name: 'Movement', color: '#4a90e2', commands: ['Move Here', 'Follow Me', 'Hold Position', 'Regroup'] },
         { name: 'Combat', color: '#e24a4a', commands: ['Attack Target', 'Defensive Stance', 'Suppressive Fire', 'Retreat'] },
         { name: 'Tactical', color: '#e2a44a', commands: ['Take Cover', 'Use Item', 'Interact', 'Search Area'] },
-        { name: 'Formation', color: '#4ae24a', commands: ['Line Formation', 'Column Formation', 'Spread Out', 'Regroup'] }
+        { name: 'Formation', color: '#4ae24a', commands: ['Line Formation', 'Column Formation', 'Spread Out', 'Circle Up'] }
       ],
       squadSelection: ['All', 'Op1', 'Op2', 'Op3']
     };
@@ -944,6 +984,21 @@
             });
           }, 2000);
           console.log(`${affectedMembers.length} squad member(s) regrouping`);
+        }
+      } else if (category === 'Formation') {
+        // Execute formation command
+        if (command === 'Line Formation') {
+          setFormation('line');
+          console.log('Squad set to Line formation');
+        } else if (command === 'Column Formation') {
+          setFormation('column');
+          console.log('Squad set to Column formation');
+        } else if (command === 'Spread Out') {
+          setFormation('spread');
+          console.log('Squad set to Spread Out formation');
+        } else if (command === 'Circle Up') {
+          setFormation('circle');
+          console.log('Squad set to Circle Up formation');
         }
       }
     }
