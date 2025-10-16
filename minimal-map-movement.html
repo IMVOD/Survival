@@ -116,6 +116,49 @@
       speed: 200                  // Movement speed (units per second)
     };
 
+    // Squad members
+    const squadMembers = [
+      {
+        id: 'op1',
+        name: 'Operative 1',
+        x: WORLD_SIZE / 2 - 50,
+        y: WORLD_SIZE / 2 + 50,
+        radius: 12,
+        speed: 200,
+        targetX: null,
+        targetY: null,
+        state: 'follow',  // 'follow', 'move', 'hold'
+        formationOffsetX: -50,
+        formationOffsetY: 50
+      },
+      {
+        id: 'op2',
+        name: 'Operative 2',
+        x: WORLD_SIZE / 2 + 50,
+        y: WORLD_SIZE / 2 + 50,
+        radius: 12,
+        speed: 200,
+        targetX: null,
+        targetY: null,
+        state: 'follow',
+        formationOffsetX: 50,
+        formationOffsetY: 50
+      },
+      {
+        id: 'op3',
+        name: 'Operative 3',
+        x: WORLD_SIZE / 2,
+        y: WORLD_SIZE / 2 + 80,
+        radius: 12,
+        speed: 200,
+        targetX: null,
+        targetY: null,
+        state: 'follow',
+        formationOffsetX: 0,
+        formationOffsetY: 80
+      }
+    ];
+
     // Camera object (follows player)
     const camera = {
       x: player.x,
@@ -188,6 +231,78 @@
     }
 
     // ========================================
+    // SQUAD AI AND MOVEMENT
+    // ========================================
+    // Update squad member AI based on their current state
+    function updateSquadAI(dt) {
+      squadMembers.forEach(member => {
+        if (member.state === 'follow') {
+          // Follow player with formation offset
+          const targetX = player.x + member.formationOffsetX;
+          const targetY = player.y + member.formationOffsetY;
+          moveTowards(member, targetX, targetY, dt);
+        } else if (member.state === 'move' && member.targetX !== null) {
+          // Move to specific target
+          moveTowards(member, member.targetX, member.targetY, dt);
+          
+          // Check if reached target
+          const dist = Math.hypot(member.x - member.targetX, member.y - member.targetY);
+          if (dist < 10) {
+            member.state = 'hold';
+            member.targetX = null;
+            member.targetY = null;
+          }
+        }
+        // 'hold' state: do nothing
+      });
+    }
+
+    // Helper function to move a unit towards a target
+    function moveTowards(unit, targetX, targetY, dt) {
+      const dx = targetX - unit.x;
+      const dy = targetY - unit.y;
+      const dist = Math.hypot(dx, dy);
+      
+      if (dist > 5) {
+        const dirX = dx / dist;
+        const dirY = dy / dist;
+        
+        unit.x += dirX * unit.speed * dt;
+        unit.y += dirY * unit.speed * dt;
+        
+        // Keep within world bounds
+        unit.x = Math.max(unit.radius, Math.min(WORLD_SIZE - unit.radius, unit.x));
+        unit.y = Math.max(unit.radius, Math.min(WORLD_SIZE - unit.radius, unit.y));
+      }
+    }
+
+    // Set squad formation offsets (wedge formation by default)
+    function setFormation(formationType) {
+      if (formationType === 'wedge') {
+        squadMembers[0].formationOffsetX = -50;
+        squadMembers[0].formationOffsetY = 50;
+        squadMembers[1].formationOffsetX = 50;
+        squadMembers[1].formationOffsetY = 50;
+        squadMembers[2].formationOffsetX = 0;
+        squadMembers[2].formationOffsetY = 80;
+      } else if (formationType === 'line') {
+        squadMembers[0].formationOffsetX = -60;
+        squadMembers[0].formationOffsetY = 0;
+        squadMembers[1].formationOffsetX = 60;
+        squadMembers[1].formationOffsetY = 0;
+        squadMembers[2].formationOffsetX = 0;
+        squadMembers[2].formationOffsetY = 0;
+      } else if (formationType === 'column') {
+        squadMembers[0].formationOffsetX = 0;
+        squadMembers[0].formationOffsetY = 40;
+        squadMembers[1].formationOffsetX = 0;
+        squadMembers[1].formationOffsetY = 80;
+        squadMembers[2].formationOffsetX = 0;
+        squadMembers[2].formationOffsetY = 120;
+      }
+    }
+
+    // ========================================
     // UPDATE LOOP
     // ========================================
     // Handles player movement and camera updates
@@ -213,6 +328,9 @@
         player.x = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.x));
         player.y = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.y));
       }
+
+      // Update squad AI
+      updateSquadAI(dt);
 
       // Camera smoothly follows player
       camera.x += (player.x - camera.x) * 0.1;
@@ -278,6 +396,31 @@
       ctx.lineTo(player.x, player.y - player.radius - 10);
       ctx.stroke();
 
+      // Draw squad members
+      squadMembers.forEach(member => {
+        // Draw squad member in blue
+        ctx.fillStyle = '#4a90e2';
+        ctx.beginPath();
+        ctx.arc(member.x, member.y, member.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw direction indicator
+        ctx.strokeStyle = '#4a90e2';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(member.x, member.y);
+        ctx.lineTo(member.x, member.y - member.radius - 8);
+        ctx.stroke();
+
+        // Draw state indicator
+        if (member.state === 'hold') {
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+          ctx.beginPath();
+          ctx.arc(member.x, member.y, member.radius + 3, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      });
+
       // Restore context
       ctx.restore();
     }
@@ -338,20 +481,22 @@
     // Command wheel state
     const commandWheel = {
       visible: false,
-      level: 1,  // 1 = categories, 2 = commands
+      level: 1,  // 1 = categories, 2 = commands, 3 = squad selection (for movement commands)
       x: 0,
       y: 0,
       radius: 120,
       innerRadius: 30,
       selectedCategory: null,
+      selectedCommand: null,
       hoveredQuadrant: -1,
       hoveredButton: -1,
       categories: [
-        { name: 'Movement', color: '#4a90e2', commands: ['Move Here', 'Follow Me', 'Patrol Route', 'Hold Position'] },
+        { name: 'Movement', color: '#4a90e2', commands: ['Move Here', 'Follow Me', 'Hold Position', 'Regroup'] },
         { name: 'Combat', color: '#e24a4a', commands: ['Attack Target', 'Defensive Stance', 'Suppressive Fire', 'Retreat'] },
         { name: 'Tactical', color: '#e2a44a', commands: ['Take Cover', 'Use Item', 'Interact', 'Search Area'] },
         { name: 'Formation', color: '#4ae24a', commands: ['Line Formation', 'Column Formation', 'Spread Out', 'Regroup'] }
-      ]
+      ],
+      squadSelection: ['All', 'Op1', 'Op2', 'Op3']
     };
 
     // Command wheel canvas setup
@@ -389,6 +534,8 @@
         drawLevel1();
       } else if (commandWheel.level === 2) {
         drawLevel2();
+      } else if (commandWheel.level === 3) {
+        drawLevel3();
       }
     }
 
@@ -529,6 +676,69 @@
       wheelCtx.fillText('←', cx, cy);
     }
 
+    // Draw Level 3: Squad selection (for movement commands)
+    function drawLevel3() {
+      const cx = commandWheel.x;
+      const cy = commandWheel.y;
+      const r = commandWheel.radius;
+      const ir = commandWheel.innerRadius;
+
+      // Draw quadrants for squad selection
+      const quadrants = [
+        { startAngle: -Math.PI / 2, endAngle: 0, labelAngle: -Math.PI / 4, index: 0 },
+        { startAngle: 0, endAngle: Math.PI / 2, labelAngle: Math.PI / 4, index: 1 },
+        { startAngle: Math.PI / 2, endAngle: Math.PI, labelAngle: 3 * Math.PI / 4, index: 2 },
+        { startAngle: Math.PI, endAngle: 3 * Math.PI / 2, labelAngle: -3 * Math.PI / 4, index: 3 }
+      ];
+
+      quadrants.forEach((quad, i) => {
+        wheelCtx.save();
+        wheelCtx.beginPath();
+        wheelCtx.arc(cx, cy, r, quad.startAngle, quad.endAngle);
+        wheelCtx.arc(cx, cy, ir, quad.endAngle, quad.startAngle, true);
+        wheelCtx.closePath();
+
+        // Fill with blue color for squad selection
+        const alpha = (commandWheel.hoveredButton === i) ? 0.9 : 0.6;
+        wheelCtx.fillStyle = `rgba(74, 144, 226, ${alpha})`;
+        wheelCtx.fill();
+
+        // Border
+        wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        wheelCtx.lineWidth = 2;
+        wheelCtx.stroke();
+
+        // Draw squad selection label
+        const labelRadius = (r + ir) / 2;
+        const labelX = cx + Math.cos(quad.labelAngle) * labelRadius;
+        const labelY = cy + Math.sin(quad.labelAngle) * labelRadius;
+
+        wheelCtx.fillStyle = '#ffffff';
+        wheelCtx.font = 'bold 14px Arial';
+        wheelCtx.textAlign = 'center';
+        wheelCtx.textBaseline = 'middle';
+        wheelCtx.fillText(commandWheel.squadSelection[i], labelX, labelY);
+
+        wheelCtx.restore();
+      });
+
+      // Draw center circle with back button
+      wheelCtx.beginPath();
+      wheelCtx.arc(cx, cy, ir, 0, Math.PI * 2);
+      wheelCtx.fillStyle = 'rgba(50, 50, 50, 0.9)';
+      wheelCtx.fill();
+      wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      wheelCtx.lineWidth = 2;
+      wheelCtx.stroke();
+
+      // Draw back arrow
+      wheelCtx.fillStyle = '#ffffff';
+      wheelCtx.font = 'bold 20px Arial';
+      wheelCtx.textAlign = 'center';
+      wheelCtx.textBaseline = 'middle';
+      wheelCtx.fillText('←', cx, cy);
+    }
+
     // ========================================
     // COMMAND WHEEL INTERACTION
     // ========================================
@@ -597,6 +807,12 @@
           commandWheel.selectedCategory = null;
           commandWheel.hoveredButton = -1;
           drawCommandWheel();
+        } else if (commandWheel.level === 3) {
+          // Back to level 2
+          commandWheel.level = 2;
+          commandWheel.selectedCommand = null;
+          commandWheel.hoveredButton = -1;
+          drawCommandWheel();
         }
         return;
       }
@@ -613,15 +829,41 @@
         commandWheel.hoveredQuadrant = -1;
         drawCommandWheel();
       } else if (commandWheel.level === 2 && commandWheel.hoveredButton >= 0) {
-        // Execute command
+        // Check if this is a Movement command
         const category = commandWheel.categories[commandWheel.selectedCategory];
         const command = category.commands[commandWheel.hoveredButton];
-        executeCommand(category.name, command);
+        
+        if (category.name === 'Movement') {
+          // Go to level 3 for squad selection
+          commandWheel.selectedCommand = commandWheel.hoveredButton;
+          commandWheel.level = 3;
+          commandWheel.hoveredButton = -1;
+          drawCommandWheel();
+        } else {
+          // Execute command directly for non-Movement categories
+          executeCommand(category.name, command, null);
+          
+          // Close wheel
+          commandWheel.visible = false;
+          commandWheel.level = 1;
+          commandWheel.selectedCategory = null;
+          commandWheel.selectedCommand = null;
+          commandWheel.hoveredButton = -1;
+          drawCommandWheel();
+        }
+      } else if (commandWheel.level === 3 && commandWheel.hoveredButton >= 0) {
+        // Execute movement command with squad selection
+        const category = commandWheel.categories[commandWheel.selectedCategory];
+        const command = category.commands[commandWheel.selectedCommand];
+        const squadSelection = commandWheel.squadSelection[commandWheel.hoveredButton];
+        
+        executeCommand(category.name, command, squadSelection);
         
         // Close wheel
         commandWheel.visible = false;
         commandWheel.level = 1;
         commandWheel.selectedCategory = null;
+        commandWheel.selectedCommand = null;
         commandWheel.hoveredButton = -1;
         drawCommandWheel();
       }
@@ -636,6 +878,7 @@
         commandWheel.y = mouse.y;
         commandWheel.level = 1;
         commandWheel.selectedCategory = null;
+        commandWheel.selectedCommand = null;
         commandWheel.hoveredQuadrant = -1;
         commandWheel.hoveredButton = -1;
       }
@@ -643,10 +886,66 @@
       drawCommandWheel();
     }
 
-    // Placeholder command execution
-    function executeCommand(category, command) {
-      console.log(`[Command Wheel] Executing: ${category} > ${command}`);
-      // Placeholder - no actual logic yet
+    // Command execution with squad support
+    function executeCommand(category, command, squadSelection) {
+      console.log(`[Command Wheel] Executing: ${category} > ${command} > ${squadSelection || 'N/A'}`);
+      
+      if (category === 'Movement' && squadSelection) {
+        // Get affected squad members
+        let affectedMembers = [];
+        if (squadSelection === 'All') {
+          affectedMembers = squadMembers;
+        } else if (squadSelection === 'Op1') {
+          affectedMembers = [squadMembers[0]];
+        } else if (squadSelection === 'Op2') {
+          affectedMembers = [squadMembers[1]];
+        } else if (squadSelection === 'Op3') {
+          affectedMembers = [squadMembers[2]];
+        }
+        
+        // Execute movement command
+        if (command === 'Move Here') {
+          // Convert mouse world position
+          const worldX = mouse.x - W/2 + camera.x;
+          const worldY = mouse.y - H/2 + camera.y;
+          
+          affectedMembers.forEach(member => {
+            member.state = 'move';
+            member.targetX = worldX;
+            member.targetY = worldY;
+          });
+          console.log(`Moving ${affectedMembers.length} squad member(s) to (${Math.round(worldX)}, ${Math.round(worldY)})`);
+        } else if (command === 'Follow Me') {
+          affectedMembers.forEach(member => {
+            member.state = 'follow';
+            member.targetX = null;
+            member.targetY = null;
+          });
+          console.log(`${affectedMembers.length} squad member(s) now following player`);
+        } else if (command === 'Hold Position') {
+          affectedMembers.forEach(member => {
+            member.state = 'hold';
+            member.targetX = null;
+            member.targetY = null;
+          });
+          console.log(`${affectedMembers.length} squad member(s) holding position`);
+        } else if (command === 'Regroup') {
+          affectedMembers.forEach(member => {
+            member.state = 'move';
+            member.targetX = player.x;
+            member.targetY = player.y;
+          });
+          // After regrouping, switch to follow
+          setTimeout(() => {
+            affectedMembers.forEach(member => {
+              if (member.state === 'move') {
+                member.state = 'follow';
+              }
+            });
+          }, 2000);
+          console.log(`${affectedMembers.length} squad member(s) regrouping`);
+        }
+      }
     }
 
     // ========================================
