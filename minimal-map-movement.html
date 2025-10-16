@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Minimal Map and Movement System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      font-family: Arial, sans-serif;
+      background: #000;
+      color: #fff;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #0a0e14;
+      cursor: crosshair;
+    }
+    #controls {
+      position: fixed;
+      left: 20px;
+      top: 20px;
+      font-size: 14px;
+      color: #9fb4d8;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px;
+      border-radius: 5px;
+      z-index: 100;
+    }
+    #info {
+      position: fixed;
+      right: 20px;
+      top: 20px;
+      font-size: 14px;
+      color: #9fb4d8;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px;
+      border-radius: 5px;
+      z-index: 100;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="controls">
+    <strong>Controls:</strong><br>
+    WASD - Move
+  </div>
+  <div id="info">
+    <strong>World:</strong> <span id="worldSize"></span><br>
+    <strong>Tile Size:</strong> <span id="tileSize"></span><br>
+    <strong>Block Size:</span> <span id="blockSize"></span><br>
+    <strong>Player Position:</strong> <span id="playerPos"></span>
+  </div>
+
+  <script>
+    // ========================================
+    // MINIMAL MAP AND MOVEMENT SYSTEM
+    // ========================================
+    // This is a standalone, self-contained system for testing
+    // the world map structure and player movement in isolation.
+    //
+    // Features included:
+    // - Fixed-size world grid (WORLD_SIZE = 8000 units)
+    // - Tile division (TILE_SIZE = 16, blockSize = 800)
+    // - Grid-based terrain with streets and grass
+    // - Player character with WASD movement
+    // - Camera that follows the player
+    // - Simple rendering of tiles and player
+    //
+    // Features NOT included (by design):
+    // - Buildings, zombies, loot, combat
+    // - Fog of war, minimap, HUD
+    // - Inventory, weapons, items
+    // - Day/night cycle, audio
+    // - Any gameplay mechanics
+    // ========================================
+
+    // World Constants
+    const WORLD_SIZE = 8000;      // Total world size in units
+    const TILE_SIZE = 16;         // Tile size (used for rendering optimization)
+    const BLOCK_SIZE = 800;       // Size of each block in the grid
+    const STREET_WIDTH = 120;     // Width of streets between blocks
+
+    // Canvas setup
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width = window.innerWidth;
+    let H = canvas.height = window.innerHeight;
+
+    // Player object
+    const player = {
+      x: WORLD_SIZE / 2,          // Start at center of world
+      y: WORLD_SIZE / 2,
+      radius: 14,                 // Player size
+      speed: 200                  // Movement speed (units per second)
+    };
+
+    // Camera object (follows player)
+    const camera = {
+      x: player.x,
+      y: player.y
+    };
+
+    // Input state
+    const keys = {};
+
+    // Terrain tiles array
+    let terrainTiles = [];
+
+    // Time tracking
+    let lastTime = performance.now();
+
+    // ========================================
+    // TERRAIN GENERATION
+    // ========================================
+    // Generates a grid-based terrain with streets and grass tiles
+    // Streets are positioned at regular intervals based on blockSize
+    function generateTerrain() {
+      terrainTiles = [];
+      const blocksPerSide = Math.floor(WORLD_SIZE / (BLOCK_SIZE + STREET_WIDTH));
+      
+      // Generate tiles in a grid pattern
+      // Using 100x100 tiles for rendering (can be adjusted)
+      const tileRenderSize = 100;
+      
+      for (let x = 0; x < WORLD_SIZE; x += tileRenderSize) {
+        for (let y = 0; y < WORLD_SIZE; y += tileRenderSize) {
+          let type = 'grass';
+          
+          // Check if this tile is on a horizontal street
+          for (let bx = 0; bx < blocksPerSide; bx++) {
+            const streetX = bx * (BLOCK_SIZE + STREET_WIDTH);
+            if (x >= streetX && x < streetX + STREET_WIDTH) {
+              type = 'street';
+              break;
+            }
+          }
+          
+          // Check if this tile is on a vertical street
+          if (type === 'grass') {
+            for (let by = 0; by < blocksPerSide; by++) {
+              const streetY = by * (BLOCK_SIZE + STREET_WIDTH);
+              if (y >= streetY && y < streetY + STREET_WIDTH) {
+                type = 'street';
+                break;
+              }
+            }
+          }
+          
+          // Add some random variation to grass tiles
+          if (type === 'grass' && Math.random() > 0.85) {
+            type = 'path';
+          }
+          
+          terrainTiles.push({
+            x: x,
+            y: y,
+            w: tileRenderSize,
+            h: tileRenderSize,
+            type: type,
+            shade: Math.random()  // Random shade for variety
+          });
+        }
+      }
+      
+      console.log(`Generated ${terrainTiles.length} terrain tiles`);
+    }
+
+    // ========================================
+    // UPDATE LOOP
+    // ========================================
+    // Handles player movement and camera updates
+    function update(dt) {
+      // Player movement with WASD keys
+      let dx = 0, dy = 0;
+      if (keys['w']) dy -= 1;
+      if (keys['s']) dy += 1;
+      if (keys['a']) dx -= 1;
+      if (keys['d']) dx += 1;
+      
+      // Normalize diagonal movement
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy);
+        dx /= len;
+        dy /= len;
+        
+        // Apply movement
+        player.x += dx * player.speed * dt;
+        player.y += dy * player.speed * dt;
+        
+        // Keep player within world bounds
+        player.x = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.x));
+        player.y = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.y));
+      }
+
+      // Camera smoothly follows player
+      camera.x += (player.x - camera.x) * 0.1;
+      camera.y += (player.y - camera.y) * 0.1;
+
+      // Update info display
+      updateInfo();
+    }
+
+    // ========================================
+    // RENDER LOOP
+    // ========================================
+    // Draws the terrain tiles and player character
+    function draw() {
+      // Clear screen
+      ctx.fillStyle = '#0a0e14';
+      ctx.fillRect(0, 0, W, H);
+
+      // Apply camera transformation
+      ctx.save();
+      ctx.translate(W/2 - camera.x, H/2 - camera.y);
+
+      // Draw terrain tiles
+      for (const tile of terrainTiles) {
+        // Cull tiles outside viewport for performance
+        const screenX = tile.x - camera.x + W/2;
+        const screenY = tile.y - camera.y + H/2;
+        if (screenX + tile.w < 0 || screenX > W || screenY + tile.h < 0 || screenY > H) {
+          continue;
+        }
+
+        // Draw tile based on type
+        if (tile.type === 'grass') {
+          const shade = 30 + tile.shade * 20;
+          ctx.fillStyle = `rgb(${shade}, ${shade + 35}, ${shade + 10})`;
+        } else if (tile.type === 'street') {
+          const shade = 50 + tile.shade * 15;
+          ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade + 5})`;
+        } else {
+          ctx.fillStyle = 'rgba(80,80,90,0.3)';
+        }
+        ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+      }
+
+      // Draw player
+      ctx.fillStyle = '#00ff88';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw player direction indicator
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(player.x, player.y);
+      ctx.lineTo(player.x, player.y - player.radius - 10);
+      ctx.stroke();
+
+      // Restore context
+      ctx.restore();
+    }
+
+    // ========================================
+    // INFO UPDATE
+    // ========================================
+    // Updates the info display with current values
+    function updateInfo() {
+      document.getElementById('worldSize').textContent = `${WORLD_SIZE} x ${WORLD_SIZE}`;
+      document.getElementById('tileSize').textContent = TILE_SIZE;
+      document.getElementById('blockSize').textContent = BLOCK_SIZE;
+      document.getElementById('playerPos').textContent = 
+        `(${Math.round(player.x)}, ${Math.round(player.y)})`;
+    }
+
+    // ========================================
+    // GAME LOOP
+    // ========================================
+    function loop() {
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+      
+      update(dt);
+      draw();
+      
+      requestAnimationFrame(loop);
+    }
+
+    // ========================================
+    // EVENT LISTENERS
+    // ========================================
+    window.addEventListener('keydown', e => {
+      keys[e.key.toLowerCase()] = true;
+    });
+
+    window.addEventListener('keyup', e => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    window.addEventListener('resize', () => {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    });
+
+    // ========================================
+    // INITIALIZATION
+    // ========================================
+    function init() {
+      console.log('=== Minimal Map and Movement System ===');
+      console.log(`World Size: ${WORLD_SIZE} x ${WORLD_SIZE}`);
+      console.log(`Tile Size: ${TILE_SIZE}`);
+      console.log(`Block Size: ${BLOCK_SIZE}`);
+      console.log(`Player Start: (${player.x}, ${player.y})`);
+      
+      generateTerrain();
+      updateInfo();
+      lastTime = performance.now();
+      loop();
+      
+      console.log('System initialized and running');
+    }
+
+    // Start the system
+    init();
+  </script>
+</body>
+</html>
