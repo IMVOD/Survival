@@ -174,6 +174,9 @@
     // Terrain tiles array
     let terrainTiles = [];
 
+    // Buildings array - Middle Eastern-style structures
+    let buildings = [];
+
     // Time tracking
     let lastTime = performance.now();
 
@@ -234,6 +237,348 @@
     }
 
     // ========================================
+    // MIDDLE EASTERN BUILDING GENERATION
+    // ========================================
+    // Generates Middle Eastern-style buildings with modular pieces
+    // Features: stucco walls, arches, courtyards, flat roofs, dense urban center
+    function generateMiddleEasternBuildings() {
+      buildings = [];
+      const centerX = WORLD_SIZE / 2;
+      const centerY = WORLD_SIZE / 2;
+      const urbanRadius = 600; // Dense urban center radius
+      const suburbanRadius = 1200; // Scattered outskirts radius
+
+      // Building piece types for Middle Eastern architecture
+      const buildingTypes = {
+        // Compact urban houses with courtyards
+        urbanHouse: { minW: 140, maxW: 200, minH: 140, maxH: 200, courtyard: true },
+        // Larger compounds with multiple rooms
+        compound: { minW: 220, maxW: 320, minH: 220, maxH: 320, courtyard: true },
+        // Small shops/dwellings
+        shop: { minW: 100, maxW: 140, minH: 100, maxH: 140, courtyard: false },
+        // Large scattered houses in outskirts
+        largehouse: { minW: 200, maxW: 280, minH: 200, maxH: 280, courtyard: true }
+      };
+
+      // Generate dense urban center buildings
+      generateUrbanCluster(centerX, centerY, urbanRadius, buildingTypes);
+
+      // Generate scattered outskirt buildings
+      generateOutskirtBuildings(centerX, centerY, suburbanRadius, buildingTypes);
+
+      console.log(`Generated ${buildings.length} Middle Eastern buildings`);
+    }
+
+    // Generate dense urban cluster in the center
+    function generateUrbanCluster(centerX, centerY, radius, buildingTypes) {
+      const attempts = 250; // More attempts for dense packing
+      const minSpacing = 25; // Minimum space between buildings (for streets/alleys)
+
+      for (let i = 0; i < attempts; i++) {
+        // Position within urban radius
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * radius;
+        const x = centerX + Math.cos(angle) * dist;
+        const y = centerY + Math.sin(angle) * dist;
+
+        // Select building type - mostly urban houses and shops in center
+        let type;
+        const rand = Math.random();
+        if (rand < 0.5) {
+          type = buildingTypes.urbanHouse;
+        } else if (rand < 0.8) {
+          type = buildingTypes.shop;
+        } else {
+          type = buildingTypes.compound;
+        }
+
+        const w = type.minW + Math.random() * (type.maxW - type.minW);
+        const h = type.minH + Math.random() * (type.maxH - type.minH);
+
+        // Check for overlap with existing buildings
+        if (checkBuildingOverlap(x, y, w, h, minSpacing)) {
+          continue;
+        }
+
+        // Create building with Middle Eastern features
+        const building = createMiddleEasternBuilding(x, y, w, h, type);
+        buildings.push(building);
+      }
+    }
+
+    // Generate scattered buildings in outskirts
+    function generateOutskirtBuildings(centerX, centerY, maxRadius, buildingTypes) {
+      const attempts = 80; // Fewer buildings in outskirts
+      const minSpacing = 80; // More space between outskirt buildings
+      const urbanRadius = 600;
+
+      for (let i = 0; i < attempts; i++) {
+        // Position in outskirts (between urbanRadius and maxRadius)
+        const angle = Math.random() * Math.PI * 2;
+        const dist = urbanRadius + Math.random() * (maxRadius - urbanRadius);
+        const x = centerX + Math.cos(angle) * dist;
+        const y = centerY + Math.sin(angle) * dist;
+
+        // Select building type - mostly compounds and large houses in outskirts
+        const type = Math.random() < 0.6 ? buildingTypes.compound : buildingTypes.largehouse;
+
+        const w = type.minW + Math.random() * (type.maxW - type.minW);
+        const h = type.minH + Math.random() * (type.maxH - type.minH);
+
+        // Keep within world bounds
+        if (x < 100 || x + w > WORLD_SIZE - 100 || y < 100 || y + h > WORLD_SIZE - 100) {
+          continue;
+        }
+
+        // Check for overlap
+        if (checkBuildingOverlap(x, y, w, h, minSpacing)) {
+          continue;
+        }
+
+        const building = createMiddleEasternBuilding(x, y, w, h, type);
+        buildings.push(building);
+      }
+    }
+
+    // Check if building would overlap with existing buildings
+    function checkBuildingOverlap(x, y, w, h, spacing) {
+      for (const other of buildings) {
+        if (x < other.x + other.w + spacing && x + w + spacing > other.x &&
+            y < other.y + other.h + spacing && y + h + spacing > other.y) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Create a Middle Eastern-style building with architectural features
+    function createMiddleEasternBuilding(x, y, w, h, type) {
+      const building = {
+        x, y, w, h,
+        type: type,
+        // Stucco color - warm earth tones
+        color: generateStuccoColor(),
+        // Walls (exterior)
+        walls: [],
+        // Interior walls
+        interiorWalls: [],
+        // Doors
+        doors: [],
+        // Courtyard (if applicable)
+        courtyard: null,
+        // Arched openings
+        arches: [],
+        // Flat roof details
+        roofDetails: []
+      };
+
+      // Create exterior walls
+      building.walls = [
+        { x1: x, y1: y, x2: x + w, y2: y }, // Top
+        { x1: x + w, y1: y, x2: x + w, y2: y + h }, // Right
+        { x1: x, y1: y + h, x2: x + w, y2: y + h }, // Bottom
+        { x1: x, y1: y, x2: x, y2: y + h } // Left
+      ];
+
+      // Add main entrance door
+      const doorSide = Math.floor(Math.random() * 4);
+      const doorWidth = 40;
+      const doorThickness = 8;
+      let door;
+
+      if (doorSide === 0) { // Top
+        door = { x: x + w/2 - doorWidth/2, y: y - doorThickness/2, w: doorWidth, h: doorThickness, side: 'north' };
+      } else if (doorSide === 1) { // Right
+        door = { x: x + w - doorThickness/2, y: y + h/2 - doorWidth/2, w: doorThickness, h: doorWidth, side: 'east' };
+      } else if (doorSide === 2) { // Bottom
+        door = { x: x + w/2 - doorWidth/2, y: y + h - doorThickness/2, w: doorWidth, h: doorThickness, side: 'south' };
+      } else { // Left
+        door = { x: x - doorThickness/2, y: y + h/2 - doorWidth/2, w: doorThickness, h: doorWidth, side: 'west' };
+      }
+      building.doors.push(door);
+
+      // Add courtyard for larger buildings
+      if (type.courtyard && w > 180 && h > 180) {
+        const courtyardMargin = 40;
+        const courtyardW = w * 0.4;
+        const courtyardH = h * 0.4;
+        const courtyardX = x + courtyardMargin + Math.random() * (w - courtyardW - courtyardMargin * 2);
+        const courtyardY = y + courtyardMargin + Math.random() * (h - courtyardH - courtyardMargin * 2);
+        
+        building.courtyard = {
+          x: courtyardX,
+          y: courtyardY,
+          w: courtyardW,
+          h: courtyardH
+        };
+
+        // Add interior walls around courtyard to create rooms
+        addInteriorWalls(building, courtyardX, courtyardY, courtyardW, courtyardH);
+      } else if (w > 150 && h > 150) {
+        // Add some interior walls to create rooms even without courtyard
+        addSimpleInteriorWalls(building);
+      }
+
+      // Add decorative arched elements (visual only, not collision)
+      if (Math.random() < 0.6) {
+        const numArches = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < numArches; i++) {
+          building.arches.push({
+            x: x + Math.random() * w,
+            y: y + Math.random() * h,
+            size: 10 + Math.random() * 20
+          });
+        }
+      }
+
+      return building;
+    }
+
+    // Generate warm stucco colors typical of Middle Eastern architecture
+    function generateStuccoColor() {
+      const colorPalette = [
+        { r: 210, g: 180, b: 140 }, // Tan
+        { r: 230, g: 200, b: 160 }, // Light sand
+        { r: 190, g: 150, b: 110 }, // Brown sand
+        { r: 240, g: 220, b: 180 }, // Off-white
+        { r: 200, g: 160, b: 120 }, // Ochre
+        { r: 220, g: 190, b: 150 }  // Desert sand
+      ];
+      
+      const base = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+      const variation = 15;
+      return `rgb(${base.r + (Math.random() * variation - variation/2)}, ${base.g + (Math.random() * variation - variation/2)}, ${base.b + (Math.random() * variation - variation/2)})`;
+    }
+
+    // Add interior walls around courtyard
+    function addInteriorWalls(building, courtyardX, courtyardY, courtyardW, courtyardH) {
+      const wallThickness = 6;
+      
+      // Walls around courtyard
+      // Top wall
+      building.interiorWalls.push({
+        x1: courtyardX, y1: courtyardY,
+        x2: courtyardX + courtyardW, y2: courtyardY,
+        thickness: wallThickness
+      });
+      // Right wall
+      building.interiorWalls.push({
+        x1: courtyardX + courtyardW, y1: courtyardY,
+        x2: courtyardX + courtyardW, y2: courtyardY + courtyardH,
+        thickness: wallThickness
+      });
+      // Bottom wall
+      building.interiorWalls.push({
+        x1: courtyardX, y1: courtyardY + courtyardH,
+        x2: courtyardX + courtyardW, y2: courtyardY + courtyardH,
+        thickness: wallThickness
+      });
+      // Left wall
+      building.interiorWalls.push({
+        x1: courtyardX, y1: courtyardY,
+        x2: courtyardX, y2: courtyardY + courtyardH,
+        thickness: wallThickness
+      });
+
+      // Add some openings (arched doorways) to courtyard walls
+      const openingCount = 2 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < openingCount; i++) {
+        const side = Math.floor(Math.random() * 4);
+        const openingSize = 30;
+        // Note: In a full implementation, we'd remove segments of walls for openings
+        // For now, doors provide access
+      }
+    }
+
+    // Add simple interior walls for smaller buildings
+    function addSimpleInteriorWalls(building) {
+      const wallThickness = 6;
+      const { x, y, w, h } = building;
+      
+      // Add 1-2 interior walls to divide space
+      if (Math.random() < 0.6 && w > 150) {
+        // Vertical wall
+        const wallX = x + w * (0.4 + Math.random() * 0.2);
+        building.interiorWalls.push({
+          x1: wallX, y1: y + 20,
+          x2: wallX, y2: y + h - 20,
+          thickness: wallThickness
+        });
+      }
+      
+      if (Math.random() < 0.6 && h > 150) {
+        // Horizontal wall
+        const wallY = y + h * (0.4 + Math.random() * 0.2);
+        building.interiorWalls.push({
+          x1: x + 20, y1: wallY,
+          x2: x + w - 20, y2: wallY,
+          thickness: wallThickness
+        });
+      }
+    }
+
+    // Check collision with all buildings
+    function checkBuildingCollision(x, y, radius) {
+      for (const building of buildings) {
+        // Check collision with exterior walls
+        if (x + radius > building.x && x - radius < building.x + building.w &&
+            y + radius > building.y && y - radius < building.y + building.h) {
+          
+          // Check if player is at a door (allow passage)
+          let atDoor = false;
+          for (const door of building.doors) {
+            if (x + radius > door.x && x - radius < door.x + door.w &&
+                y + radius > door.y && y - radius < door.y + door.h) {
+              atDoor = true;
+              break;
+            }
+          }
+          
+          if (!atDoor) {
+            return true; // Collision with building wall
+          }
+        }
+
+        // Check collision with interior walls
+        for (const wall of building.interiorWalls) {
+          if (lineCircleCollision(wall.x1, wall.y1, wall.x2, wall.y2, x, y, radius + wall.thickness/2)) {
+            return true;
+          }
+        }
+
+        // Check courtyard (player can enter courtyard)
+        // Courtyard is open space, no collision
+      }
+      return false;
+    }
+
+    // Line-circle collision detection for interior walls
+    function lineCircleCollision(x1, y1, x2, y2, cx, cy, radius) {
+      // Vector from line start to circle center
+      const dx = cx - x1;
+      const dy = cy - y1;
+      
+      // Vector of the line
+      const lx = x2 - x1;
+      const ly = y2 - y1;
+      
+      // Project circle center onto line
+      const lineLen = Math.hypot(lx, ly);
+      if (lineLen === 0) return Math.hypot(dx, dy) < radius;
+      
+      const t = Math.max(0, Math.min(1, (dx * lx + dy * ly) / (lineLen * lineLen)));
+      
+      // Closest point on line to circle
+      const closestX = x1 + t * lx;
+      const closestY = y1 + t * ly;
+      
+      // Distance from circle to closest point
+      const dist = Math.hypot(cx - closestX, cy - closestY);
+      
+      return dist < radius;
+    }
+
+    // ========================================
     // SQUAD AI AND MOVEMENT
     // ========================================
     // Update squad member AI based on their current state
@@ -270,8 +615,16 @@
         const dirX = dx / dist;
         const dirY = dy / dist;
         
-        unit.x += dirX * unit.speed * dt;
-        unit.y += dirY * unit.speed * dt;
+        const newX = unit.x + dirX * unit.speed * dt;
+        const newY = unit.y + dirY * unit.speed * dt;
+        
+        // Check collision before moving
+        if (!checkBuildingCollision(newX, unit.y, unit.radius)) {
+          unit.x = newX;
+        }
+        if (!checkBuildingCollision(unit.x, newY, unit.radius)) {
+          unit.y = newY;
+        }
         
         // Keep within world bounds
         unit.x = Math.max(unit.radius, Math.min(WORLD_SIZE - unit.radius, unit.x));
@@ -358,9 +711,17 @@
         dx /= len;
         dy /= len;
         
-        // Apply movement
-        player.x += dx * player.speed * dt;
-        player.y += dy * player.speed * dt;
+        // Apply movement with collision detection
+        const newX = player.x + dx * player.speed * dt;
+        const newY = player.y + dy * player.speed * dt;
+        
+        // Check collision before moving
+        if (!checkBuildingCollision(newX, player.y, player.radius)) {
+          player.x = newX;
+        }
+        if (!checkBuildingCollision(player.x, newY, player.radius)) {
+          player.y = newY;
+        }
         
         // Keep player within world bounds
         player.x = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.x));
@@ -418,6 +779,67 @@
           ctx.fillStyle = 'rgba(160, 120, 80, 0.6)';
         }
         ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+      }
+
+      // Draw Middle Eastern buildings
+      for (const building of buildings) {
+        // Cull buildings outside viewport
+        const screenX = building.x - camera.x + W/2;
+        const screenY = building.y - camera.y + H/2;
+        if (screenX + building.w < 0 || screenX > W || screenY + building.h < 0 || screenY > H) {
+          continue;
+        }
+
+        // Draw building fill (stucco)
+        ctx.fillStyle = building.color;
+        ctx.fillRect(building.x, building.y, building.w, building.h);
+
+        // Draw courtyard if present
+        if (building.courtyard) {
+          const c = building.courtyard;
+          // Courtyard is lighter/sandy color (open to sky)
+          ctx.fillStyle = 'rgba(220, 200, 170, 0.8)';
+          ctx.fillRect(c.x, c.y, c.w, c.h);
+        }
+
+        // Draw exterior walls (darker stucco outline)
+        ctx.strokeStyle = 'rgba(120, 90, 60, 0.8)';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(building.x, building.y, building.w, building.h);
+
+        // Draw interior walls
+        ctx.strokeStyle = 'rgba(140, 110, 80, 0.7)';
+        ctx.lineWidth = 4;
+        for (const wall of building.interiorWalls) {
+          ctx.beginPath();
+          ctx.moveTo(wall.x1, wall.y1);
+          ctx.lineTo(wall.x2, wall.y2);
+          ctx.stroke();
+        }
+
+        // Draw doors (wooden brown)
+        ctx.fillStyle = 'rgba(101, 67, 33, 0.9)';
+        for (const door of building.doors) {
+          ctx.fillRect(door.x, door.y, door.w, door.h);
+          // Door frame
+          ctx.strokeStyle = 'rgba(60, 40, 20, 0.9)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(door.x, door.y, door.w, door.h);
+        }
+
+        // Draw decorative arches (optional architectural detail)
+        ctx.strokeStyle = 'rgba(180, 150, 110, 0.6)';
+        ctx.lineWidth = 2;
+        for (const arch of building.arches) {
+          ctx.beginPath();
+          ctx.arc(arch.x, arch.y, arch.size, 0, Math.PI);
+          ctx.stroke();
+        }
+
+        // Add flat roof details (subtle shadow lines for depth)
+        ctx.strokeStyle = 'rgba(100, 80, 50, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(building.x + 3, building.y + 3, building.w - 6, building.h - 6);
       }
 
       // Draw player
@@ -1032,6 +1454,7 @@
       console.log(`Player Start: (${player.x}, ${player.y})`);
       
       generateTerrain();
+      generateMiddleEasternBuildings();
       updateInfo();
       lastTime = performance.now();
       loop();
