@@ -1890,119 +1890,374 @@
       }
     }
 
+    // Middle Eastern building theme data
+    const MIDDLE_EASTERN_COLORS = {
+      stucco: [
+        'rgb(222, 200, 168)', // Cream/beige
+        'rgb(210, 180, 140)', // Tan
+        'rgb(238, 220, 190)', // Light sand
+        'rgb(205, 175, 145)', // Sandy brown
+        'rgb(218, 195, 165)', // Desert beige
+        'rgb(230, 210, 180)', // Light clay
+      ],
+      trim: 'rgb(140, 100, 70)', // Dark brown trim
+      door: 'rgb(95, 65, 45)', // Dark wood
+      courtyard: 'rgb(195, 165, 135)' // Lighter sand
+    };
+
     function generateBuildings() {
       buildings = [];
       lootBoxes = [];
       const blockSize = 800;
       const streetWidth = STREET_WIDTH;
       const blocksPerSide = Math.floor(WORLD_SIZE / (blockSize + streetWidth));
+      const worldCenter = WORLD_SIZE / 2;
       
       for (let bx = 0; bx < blocksPerSide; bx++) {
         for (let by = 0; by < blocksPerSide; by++) {
           const blockX = bx * (blockSize + streetWidth) + streetWidth;
           const blockY = by * (blockSize + streetWidth) + streetWidth;
+          const blockCenterX = blockX + blockSize / 2;
+          const blockCenterY = blockY + blockSize / 2;
+          const distFromCenter = Math.hypot(blockCenterX - worldCenter, blockCenterY - worldCenter);
           
-          const housesInBlock = 2 + Math.floor(Math.random() * 3);
+          // Determine building density based on distance from center
+          // Center: 4-6 buildings per block (dense urban)
+          // Middle: 2-4 buildings per block
+          // Outskirts: 1-2 buildings per block (sparse compounds)
+          let housesInBlock;
+          let buildingStyle; // 'urban', 'medium', 'compound'
+          if (distFromCenter < 1200) {
+            // Dense town center
+            housesInBlock = 4 + Math.floor(Math.random() * 3);
+            buildingStyle = 'urban';
+          } else if (distFromCenter < 2400) {
+            // Medium density
+            housesInBlock = 2 + Math.floor(Math.random() * 3);
+            buildingStyle = 'medium';
+          } else {
+            // Sparse outskirts
+            housesInBlock = 1 + Math.floor(Math.random() * 2);
+            buildingStyle = 'compound';
+          }
+          
           for (let h = 0; h < housesInBlock; h++) {
-            const w = 180 + Math.random() * 140;
-            const hh = 180 + Math.random() * 140;
-            const x = blockX + Math.random() * (blockSize - w - 60) + 30;
-            const y = blockY + Math.random() * (blockSize - hh - 60) + 30;
+            let building;
+            if (buildingStyle === 'urban' && Math.random() > 0.3) {
+              // Urban: Create modular building with courtyard
+              building = createMiddleEasternUrbanBuilding(blockX, blockY, blockSize, bx, by);
+            } else if (buildingStyle === 'compound' && Math.random() > 0.5) {
+              // Outskirts: Create walled compound
+              building = createMiddleEasternCompound(blockX, blockY, blockSize, bx, by);
+            } else {
+              // Standard house with Middle Eastern style
+              building = createMiddleEasternHouse(blockX, blockY, blockSize, bx, by);
+            }
             
+            if (!building) continue; // Skip if overlap detected
+            
+            // Check for overlap with existing buildings
             let overlap = false;
             for (const other of buildings) {
-              if (x < other.x + other.w + 40 && x + w + 40 > other.x &&
-                  y < other.y + other.h + 40 && y + hh + 40 > other.y) {
+              const margin = 40;
+              if (building.x < other.x + other.w + margin && building.x + building.w + margin > other.x &&
+                  building.y < other.y + other.h + margin && building.y + building.h + margin > other.y) {
                 overlap = true;
                 break;
               }
             }
             if (overlap) continue;
-            
-            // Dynamic door placement: face nearest street edge
-            const leftStreetX = bx * (blockSize + streetWidth);
-            const rightStreetX = blockX + blockSize;
-            const topStreetY = by * (blockSize + streetWidth);
-            const bottomStreetY = blockY + blockSize;
-            const distLeft = Math.abs(x - leftStreetX);
-            const distRight = Math.abs((x + w) - rightStreetX);
-            const distTop = Math.abs(y - topStreetY);
-            const distBottom = Math.abs((y + hh) - bottomStreetY);
-            const min = Math.min(distLeft, distRight, distTop, distBottom);
-            let doorX, doorY, doorW, doorH, doorSide;
-            const doorSize = 40;
-            if (min === distTop) {
-              doorSide = 'north'; doorW = doorSize; doorH = 5;
-              doorX = x + (w/2) - doorW/2; doorY = y - doorH;
-            } else if (min === distBottom) {
-              doorSide = 'south'; doorW = doorSize; doorH = 5;
-              doorX = x + (w/2) - doorW/2; doorY = y + hh;
-            } else if (min === distLeft) {
-              doorSide = 'west'; doorW = 5; doorH = doorSize;
-              doorX = x - doorW; doorY = y + (hh/2) - doorH/2;
-            } else {
-              doorSide = 'east'; doorW = 5; doorH = doorSize;
-              doorX = x + w; doorY = y + (hh/2) - doorH/2;
-            }
-            
-            const building = {
-              x, y, w, h: hh, explored: false,
-              doorX, doorY, doorW, doorH, doorSide,
-              zombiesInside: [],
-              color: `rgb(${80 + Math.random() * 60}, ${70 + Math.random() * 50}, ${60 + Math.random() * 40})`
-            };
 
-            // Spawn zombies distributed throughout the building, avoiding door area
-            const zombieCount = 2 + Math.floor(Math.random() * 4);
-            const doorMargin = 60; // Keep zombies away from door area
-            for (let j = 0; j < zombieCount; j++) {
-              let spawnX, spawnY;
-              let attempts = 0;
-              do {
-                // Try to spawn away from door area
-                if (doorSide === 'north') {
-                  spawnX = x + 20 + Math.random() * (w - 40);
-                  spawnY = y + doorMargin + Math.random() * (hh - doorMargin - 40);
-                } else if (doorSide === 'south') {
-                  spawnX = x + 20 + Math.random() * (w - 40);
-                  spawnY = y + 20 + Math.random() * (hh - doorMargin - 40);
-                } else if (doorSide === 'west') {
-                  spawnX = x + doorMargin + Math.random() * (w - doorMargin - 40);
-                  spawnY = y + 20 + Math.random() * (hh - 40);
-                } else { // east
-                  spawnX = x + 20 + Math.random() * (w - doorMargin - 40);
-                  spawnY = y + 20 + Math.random() * (hh - 40);
-                }
-                attempts++;
-              } while (attempts < 10); // Fallback to any position if needed
-              
-              building.zombiesInside.push({
-                x: spawnX,
-                y: spawnY,
-                radius: 10, health: 50, maxHealth: 50, speed: 35,
-                wanderAngle: Math.random() * Math.PI * 2,
-                wanderTimer: Math.random() * 2, // Stagger their initial movement
-                state: 'wander', building: building,
-                animOffset: Math.random() * Math.PI * 2
-              });
-            }
-
-            // Add 1-3 loot boxes per building
-            const lootBoxCount = 1 + Math.floor(Math.random() * 3);
-            for (let lb = 0; lb < lootBoxCount; lb++) {
-              lootBoxes.push({
-                x: x + 30 + Math.random() * (w - 60),
-                y: y + 30 + Math.random() * (hh - 60),
-                size: 20,
-                opened: false,
-                building: building,
-                pulsePhase: Math.random() * Math.PI * 2
-              });
-            }
-
+            // Add zombies and loot
+            addZombiesAndLootToBuilding(building);
             buildings.push(building);
           }
         }
+      }
+    }
+
+    // Create a Middle Eastern style urban building with courtyard
+    function createMiddleEasternUrbanBuilding(blockX, blockY, blockSize, bx, by) {
+      const w = 200 + Math.random() * 100;
+      const h = 200 + Math.random() * 100;
+      const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+      const y = blockY + Math.random() * (blockSize - h - 60) + 30;
+      
+      // Main structure
+      const building = {
+        x, y, w, h,
+        explored: false,
+        zombiesInside: [],
+        color: MIDDLE_EASTERN_COLORS.stucco[Math.floor(Math.random() * MIDDLE_EASTERN_COLORS.stucco.length)],
+        style: 'urban',
+        rooms: [],
+        walls: [],
+        arches: [],
+        courtyard: null
+      };
+      
+      // Create courtyard in center (30-40% of building size)
+      const courtyardSize = Math.min(w, h) * (0.3 + Math.random() * 0.1);
+      const courtyardX = x + (w - courtyardSize) / 2;
+      const courtyardY = y + (h - courtyardSize) / 2;
+      building.courtyard = {
+        x: courtyardX,
+        y: courtyardY,
+        w: courtyardSize,
+        h: courtyardSize
+      };
+      
+      // Create rooms around courtyard (4 wings)
+      const roomDepth = (w - courtyardSize) / 2;
+      
+      // North wing
+      building.rooms.push({
+        x: x,
+        y: y,
+        w: w,
+        h: roomDepth,
+        hasArch: true
+      });
+      
+      // South wing
+      building.rooms.push({
+        x: x,
+        y: courtyardY + courtyardSize,
+        w: w,
+        h: roomDepth,
+        hasArch: true
+      });
+      
+      // West wing
+      building.rooms.push({
+        x: x,
+        y: courtyardY,
+        w: roomDepth,
+        h: courtyardSize,
+        hasArch: true
+      });
+      
+      // East wing
+      building.rooms.push({
+        x: courtyardX + courtyardSize,
+        y: courtyardY,
+        w: roomDepth,
+        h: courtyardSize,
+        hasArch: true
+      });
+      
+      // Add arched doorways to courtyard
+      building.arches.push({
+        x: courtyardX + courtyardSize / 2 - 20,
+        y: courtyardY - 5,
+        w: 40,
+        h: 10,
+        type: 'courtyard'
+      });
+      building.arches.push({
+        x: courtyardX + courtyardSize / 2 - 20,
+        y: courtyardY + courtyardSize - 5,
+        w: 40,
+        h: 10,
+        type: 'courtyard'
+      });
+      
+      // Add main entrance door facing nearest street
+      const doorData = calculateDoorPosition(x, y, w, h, bx, by, blockSize);
+      building.doorX = doorData.doorX;
+      building.doorY = doorData.doorY;
+      building.doorW = doorData.doorW;
+      building.doorH = doorData.doorH;
+      building.doorSide = doorData.doorSide;
+      
+      return building;
+    }
+
+    // Create a Middle Eastern walled compound for outskirts
+    function createMiddleEasternCompound(blockX, blockY, blockSize, bx, by) {
+      const w = 250 + Math.random() * 150;
+      const h = 250 + Math.random() * 150;
+      const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+      const y = blockY + Math.random() * (blockSize - h - 60) + 30;
+      
+      const building = {
+        x, y, w, h,
+        explored: false,
+        zombiesInside: [],
+        color: MIDDLE_EASTERN_COLORS.stucco[Math.floor(Math.random() * MIDDLE_EASTERN_COLORS.stucco.length)],
+        style: 'compound',
+        rooms: [],
+        walls: [],
+        arches: [],
+        courtyard: null
+      };
+      
+      // Create outer wall
+      const wallThickness = 15;
+      building.walls.push(
+        // Outer perimeter walls
+        { x: x, y: y, w: w, h: wallThickness }, // North
+        { x: x, y: y + h - wallThickness, w: w, h: wallThickness }, // South
+        { x: x, y: y, w: wallThickness, h: h }, // West
+        { x: x + w - wallThickness, y: y, w: wallThickness, h: h } // East
+      );
+      
+      // Central courtyard
+      const courtyardMargin = 60;
+      building.courtyard = {
+        x: x + courtyardMargin,
+        y: y + courtyardMargin,
+        w: w - courtyardMargin * 2,
+        h: h - courtyardMargin * 2
+      };
+      
+      // Small building structures in corners
+      const structSize = 80;
+      building.rooms.push(
+        { x: x + 20, y: y + 20, w: structSize, h: structSize },
+        { x: x + w - structSize - 20, y: y + 20, w: structSize, h: structSize },
+        { x: x + 20, y: y + h - structSize - 20, w: structSize, h: structSize }
+      );
+      
+      // Main gate
+      const doorData = calculateDoorPosition(x, y, w, h, bx, by, blockSize);
+      building.doorX = doorData.doorX;
+      building.doorY = doorData.doorY;
+      building.doorW = doorData.doorW * 1.5; // Wider gate
+      building.doorH = doorData.doorH * 1.5;
+      building.doorSide = doorData.doorSide;
+      
+      // Add decorative arches on gate
+      building.arches.push({
+        x: doorData.doorX,
+        y: doorData.doorY,
+        w: doorData.doorW * 1.5,
+        h: doorData.doorH * 1.5,
+        type: 'gate'
+      });
+      
+      return building;
+    }
+
+    // Create a standard Middle Eastern house
+    function createMiddleEasternHouse(blockX, blockY, blockSize, bx, by) {
+      const w = 180 + Math.random() * 140;
+      const h = 180 + Math.random() * 140;
+      const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+      const y = blockY + Math.random() * (blockSize - h - 60) + 30;
+      
+      const building = {
+        x, y, w, h,
+        explored: false,
+        zombiesInside: [],
+        color: MIDDLE_EASTERN_COLORS.stucco[Math.floor(Math.random() * MIDDLE_EASTERN_COLORS.stucco.length)],
+        style: 'house',
+        rooms: [],
+        walls: [],
+        arches: [],
+        courtyard: null
+      };
+      
+      // Sometimes add a small internal courtyard or rooms
+      if (Math.random() > 0.5 && w > 200 && h > 200) {
+        const smallCourtyardSize = Math.min(w, h) * 0.25;
+        building.courtyard = {
+          x: x + (w - smallCourtyardSize) / 2,
+          y: y + (h - smallCourtyardSize) / 2,
+          w: smallCourtyardSize,
+          h: smallCourtyardSize
+        };
+      }
+      
+      // Add door
+      const doorData = calculateDoorPosition(x, y, w, h, bx, by, blockSize);
+      building.doorX = doorData.doorX;
+      building.doorY = doorData.doorY;
+      building.doorW = doorData.doorW;
+      building.doorH = doorData.doorH;
+      building.doorSide = doorData.doorSide;
+      
+      return building;
+    }
+
+    // Calculate door position facing nearest street
+    function calculateDoorPosition(x, y, w, h, bx, by, blockSize) {
+      const streetWidth = STREET_WIDTH;
+      const leftStreetX = bx * (blockSize + streetWidth);
+      const rightStreetX = bx * (blockSize + streetWidth) + streetWidth + blockSize;
+      const topStreetY = by * (blockSize + streetWidth);
+      const bottomStreetY = by * (blockSize + streetWidth) + streetWidth + blockSize;
+      
+      const distLeft = Math.abs(x - leftStreetX);
+      const distRight = Math.abs((x + w) - rightStreetX);
+      const distTop = Math.abs(y - topStreetY);
+      const distBottom = Math.abs((y + h) - bottomStreetY);
+      const min = Math.min(distLeft, distRight, distTop, distBottom);
+      
+      let doorX, doorY, doorW, doorH, doorSide;
+      const doorSize = 40;
+      
+      if (min === distTop) {
+        doorSide = 'north'; doorW = doorSize; doorH = 5;
+        doorX = x + (w/2) - doorW/2; doorY = y - doorH;
+      } else if (min === distBottom) {
+        doorSide = 'south'; doorW = doorSize; doorH = 5;
+        doorX = x + (w/2) - doorW/2; doorY = y + h;
+      } else if (min === distLeft) {
+        doorSide = 'west'; doorW = 5; doorH = doorSize;
+        doorX = x - doorW; doorY = y + (h/2) - doorH/2;
+      } else {
+        doorSide = 'east'; doorW = 5; doorH = doorSize;
+        doorX = x + w; doorY = y + (h/2) - doorH/2;
+      }
+      
+      return { doorX, doorY, doorW, doorH, doorSide };
+    }
+
+    // Add zombies and loot to a building
+    function addZombiesAndLootToBuilding(building) {
+      // Spawn zombies distributed throughout the building, avoiding door area
+      const zombieCount = 2 + Math.floor(Math.random() * 4);
+      const doorMargin = 60;
+      
+      for (let j = 0; j < zombieCount; j++) {
+        let spawnX, spawnY;
+        let attempts = 0;
+        do {
+          spawnX = building.x + 20 + Math.random() * (building.w - 40);
+          spawnY = building.y + 20 + Math.random() * (building.h - 40);
+          
+          // Avoid door area
+          const doorCenterX = building.doorX + building.doorW / 2;
+          const doorCenterY = building.doorY + building.doorH / 2;
+          const distFromDoor = Math.hypot(spawnX - doorCenterX, spawnY - doorCenterY);
+          
+          attempts++;
+          if (distFromDoor > doorMargin || attempts > 20) break;
+        } while (true);
+        
+        building.zombiesInside.push({
+          x: spawnX,
+          y: spawnY,
+          radius: 10, health: 50, maxHealth: 50, speed: 35,
+          wanderAngle: Math.random() * Math.PI * 2,
+          wanderTimer: Math.random() * 2,
+          state: 'wander', building: building,
+          animOffset: Math.random() * Math.PI * 2
+        });
+      }
+
+      // Add 1-3 loot boxes per building
+      const lootBoxCount = 1 + Math.floor(Math.random() * 3);
+      for (let lb = 0; lb < lootBoxCount; lb++) {
+        lootBoxes.push({
+          x: building.x + 30 + Math.random() * (building.w - 60),
+          y: building.y + 30 + Math.random() * (building.h - 60),
+          size: 20,
+          opened: false,
+          building: building,
+          pulsePhase: Math.random() * Math.PI * 2
+        });
       }
     }
 
@@ -2015,11 +2270,41 @@
           return null;
         }
         
+        // Check if in courtyard - allow movement
+        if (b.courtyard) {
+          const inCourtyardX = x > b.courtyard.x && x < b.courtyard.x + b.courtyard.w;
+          const inCourtyardY = y > b.courtyard.y && y < b.courtyard.y + b.courtyard.h;
+          if (inCourtyardX && inCourtyardY) {
+            return null;
+          }
+        }
+        
+        // Check if in any arch - allow movement
+        if (b.arches) {
+          for (const arch of b.arches) {
+            const inArchX = x + radius > arch.x && x - radius < arch.x + arch.w;
+            const inArchY = y + radius > arch.y && y - radius < arch.y + arch.h;
+            if (inArchX && inArchY) {
+              return null;
+            }
+          }
+        }
+        
         const insideX = x > b.x && x < b.x + b.w;
         const insideY = y > b.y && y < b.y + b.h;
         
         if (insideX && insideY) {
           return null;
+        }
+        
+        // Check collision with walls (for compound style)
+        if (b.walls && b.walls.length > 0) {
+          for (const wall of b.walls) {
+            if (x + radius > wall.x && x - radius < wall.x + wall.w &&
+                y + radius > wall.y && y - radius < wall.y + wall.h) {
+              return b;
+            }
+          }
         }
         
         if (x + radius > b.x && x - radius < b.x + b.w &&
@@ -2937,24 +3222,120 @@
         ctx.restore();
       }
 
-      // Draw buildings (top-down): stronger outlines and clear doors, no windows
+      // Draw buildings with Middle Eastern styling
       for (const b of buildings) {
+        // Draw main building footprint
         ctx.fillStyle = b.color;
         ctx.fillRect(b.x, b.y, b.w, b.h);
         
-        // Strong wall outline for visibility
-        ctx.strokeStyle = b.explored ? 'rgba(255,200,120,0.9)' : 'rgba(0,0,0,0.7)';
+        // Draw courtyard if present (lighter sand color)
+        if (b.courtyard) {
+          ctx.fillStyle = MIDDLE_EASTERN_COLORS.courtyard;
+          ctx.fillRect(b.courtyard.x, b.courtyard.y, b.courtyard.w, b.courtyard.h);
+          
+          // Courtyard border
+          ctx.strokeStyle = MIDDLE_EASTERN_COLORS.trim;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(b.courtyard.x, b.courtyard.y, b.courtyard.w, b.courtyard.h);
+        }
+        
+        // Draw individual rooms if defined
+        if (b.rooms && b.rooms.length > 0) {
+          for (const room of b.rooms) {
+            ctx.fillStyle = b.color;
+            ctx.fillRect(room.x, room.y, room.w, room.h);
+            
+            // Room borders
+            ctx.strokeStyle = MIDDLE_EASTERN_COLORS.trim;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(room.x, room.y, room.w, room.h);
+          }
+        }
+        
+        // Draw walls (for compounds)
+        if (b.walls && b.walls.length > 0) {
+          ctx.fillStyle = b.color;
+          for (const wall of b.walls) {
+            ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+          }
+          
+          // Wall outlines
+          ctx.strokeStyle = MIDDLE_EASTERN_COLORS.trim;
+          ctx.lineWidth = 2;
+          for (const wall of b.walls) {
+            ctx.strokeRect(wall.x, wall.y, wall.w, wall.h);
+          }
+        }
+        
+        // Draw arches (decorative archways)
+        if (b.arches && b.arches.length > 0) {
+          for (const arch of b.arches) {
+            if (arch.type === 'courtyard') {
+              // Draw simple arch opening
+              ctx.fillStyle = MIDDLE_EASTERN_COLORS.courtyard;
+              ctx.fillRect(arch.x, arch.y, arch.w, arch.h);
+              
+              // Arch outline with decorative style
+              ctx.strokeStyle = MIDDLE_EASTERN_COLORS.trim;
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.arc(arch.x + arch.w/2, arch.y + arch.h, arch.w/2, Math.PI, 0, false);
+              ctx.stroke();
+            } else if (arch.type === 'gate') {
+              // Draw larger gate arch
+              ctx.fillStyle = 'rgba(0,0,0,0.3)';
+              ctx.fillRect(arch.x, arch.y, arch.w, arch.h);
+              
+              ctx.strokeStyle = MIDDLE_EASTERN_COLORS.trim;
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.arc(arch.x + arch.w/2, arch.y + arch.h, arch.w/2, Math.PI, 0, false);
+              ctx.stroke();
+            }
+          }
+        }
+        
+        // Strong wall outline for main structure
+        ctx.strokeStyle = b.explored ? 'rgba(140,100,70,0.9)' : 'rgba(0,0,0,0.7)';
         ctx.lineWidth = 4;
         ctx.strokeRect(b.x, b.y, b.w, b.h);
         
-        // Door with emphasized style
-        ctx.fillStyle = 'rgba(80,50,35,0.95)';
+        // Draw flat roof indication (subtle lines)
+        if (b.style === 'urban' || b.style === 'house') {
+          ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+          ctx.lineWidth = 1;
+          const roofLineSpacing = 20;
+          for (let i = roofLineSpacing; i < b.w; i += roofLineSpacing) {
+            ctx.beginPath();
+            ctx.moveTo(b.x + i, b.y + 5);
+            ctx.lineTo(b.x + i, b.y + 15);
+            ctx.stroke();
+          }
+        }
+        
+        // Door with Middle Eastern styling
+        ctx.fillStyle = MIDDLE_EASTERN_COLORS.door;
         ctx.fillRect(b.doorX, b.doorY, b.doorW, b.doorH);
-        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-        ctx.lineWidth = 2;
+        
+        // Door frame
+        ctx.strokeStyle = MIDDLE_EASTERN_COLORS.trim;
+        ctx.lineWidth = 3;
         ctx.strokeRect(b.doorX, b.doorY, b.doorW, b.doorH);
         
-        // Indoor zombies are now moved to main zombies array when revealed, so no need to draw them here
+        // Add decorative door details
+        if (b.doorW > b.doorH) {
+          // Horizontal door - add vertical line in center
+          ctx.beginPath();
+          ctx.moveTo(b.doorX + b.doorW/2, b.doorY);
+          ctx.lineTo(b.doorX + b.doorW/2, b.doorY + b.doorH);
+          ctx.stroke();
+        } else {
+          // Vertical door - add horizontal line in center
+          ctx.beginPath();
+          ctx.moveTo(b.doorX, b.doorY + b.doorH/2);
+          ctx.lineTo(b.doorX + b.doorW, b.doorY + b.doorH/2);
+          ctx.stroke();
+        }
       }
 
       // Draw loot boxes

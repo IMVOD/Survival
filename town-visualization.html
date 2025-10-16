@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Middle Eastern Town Visualization</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1a1a1a;
+      font-family: Arial, sans-serif;
+      color: #fff;
+    }
+    #canvas {
+      border: 2px solid #444;
+      background: #c2a878;
+      display: block;
+      margin: 20px auto;
+    }
+    .info {
+      text-align: center;
+      margin: 20px;
+    }
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 20px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-color {
+      width: 30px;
+      height: 20px;
+      border: 1px solid #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="info">
+    <h1>Middle Eastern Town Layout Visualization</h1>
+    <p>This shows the entire world map with all generated buildings</p>
+  </div>
+  
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color" style="background: rgb(222, 200, 168);"></div>
+      <span>Buildings (Stucco)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: rgb(195, 165, 135);"></div>
+      <span>Courtyards</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: rgb(95, 65, 45);"></div>
+      <span>Doors</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #888;"></div>
+      <span>Streets</span>
+    </div>
+  </div>
+  
+  <canvas id="canvas"></canvas>
+  
+  <div class="info" id="stats"></div>
+
+  <script>
+    const WORLD_SIZE = 8000;
+    const STREET_WIDTH = 120;
+    
+    const MIDDLE_EASTERN_COLORS = {
+      stucco: [
+        'rgb(222, 200, 168)',
+        'rgb(210, 180, 140)',
+        'rgb(238, 220, 190)',
+        'rgb(205, 175, 145)',
+        'rgb(218, 195, 165)',
+        'rgb(230, 210, 180)',
+      ],
+      trim: 'rgb(140, 100, 70)',
+      door: 'rgb(95, 65, 45)',
+      courtyard: 'rgb(195, 165, 135)'
+    };
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set canvas size to fit the screen while maintaining aspect ratio
+    const scale = 0.1; // Show entire world at 10% scale
+    canvas.width = WORLD_SIZE * scale;
+    canvas.height = WORLD_SIZE * scale;
+    
+    let buildings = [];
+    
+    // Copy the building generation functions from the main game
+    function generateBuildings() {
+      buildings = [];
+      const blockSize = 800;
+      const streetWidth = STREET_WIDTH;
+      const blocksPerSide = Math.floor(WORLD_SIZE / (blockSize + streetWidth));
+      const worldCenter = WORLD_SIZE / 2;
+      
+      let urbanCount = 0;
+      let mediumCount = 0;
+      let compoundCount = 0;
+      
+      for (let bx = 0; bx < blocksPerSide; bx++) {
+        for (let by = 0; by < blocksPerSide; by++) {
+          const blockX = bx * (blockSize + streetWidth) + streetWidth;
+          const blockY = by * (blockSize + streetWidth) + streetWidth;
+          const blockCenterX = blockX + blockSize / 2;
+          const blockCenterY = blockY + blockSize / 2;
+          const distFromCenter = Math.hypot(blockCenterX - worldCenter, blockCenterY - worldCenter);
+          
+          let housesInBlock;
+          let buildingStyle;
+          if (distFromCenter < 1200) {
+            housesInBlock = 4 + Math.floor(Math.random() * 3);
+            buildingStyle = 'urban';
+          } else if (distFromCenter < 2400) {
+            housesInBlock = 2 + Math.floor(Math.random() * 3);
+            buildingStyle = 'medium';
+          } else {
+            housesInBlock = 1 + Math.floor(Math.random() * 2);
+            buildingStyle = 'compound';
+          }
+          
+          for (let h = 0; h < housesInBlock; h++) {
+            let building;
+            if (buildingStyle === 'urban' && Math.random() > 0.3) {
+              building = createMiddleEasternUrbanBuilding(blockX, blockY, blockSize, bx, by);
+              urbanCount++;
+            } else if (buildingStyle === 'compound' && Math.random() > 0.5) {
+              building = createMiddleEasternCompound(blockX, blockY, blockSize, bx, by);
+              compoundCount++;
+            } else {
+              building = createMiddleEasternHouse(blockX, blockY, blockSize, bx, by);
+              mediumCount++;
+            }
+            
+            if (!building) continue;
+            
+            let overlap = false;
+            for (const other of buildings) {
+              const margin = 40;
+              if (building.x < other.x + other.w + margin && building.x + building.w + margin > other.x &&
+                  building.y < other.y + other.h + margin && building.y + building.h + margin > other.y) {
+                overlap = true;
+                break;
+              }
+            }
+            if (overlap) continue;
+
+            buildings.push(building);
+          }
+        }
+      }
+      
+      document.getElementById('stats').innerHTML = `
+        <h3>Town Statistics</h3>
+        <p><strong>Total Buildings:</strong> ${buildings.length}</p>
+        <p><strong>Urban Buildings (with courtyards):</strong> ${urbanCount}</p>
+        <p><strong>Standard Houses:</strong> ${mediumCount}</p>
+        <p><strong>Walled Compounds:</strong> ${compoundCount}</p>
+        <p><strong>Buildings in Center (< 1200 units):</strong> ${buildings.filter(b => {
+          const dx = (b.x + b.w/2) - worldCenter;
+          const dy = (b.y + b.h/2) - worldCenter;
+          return Math.hypot(dx, dy) < 1200;
+        }).length}</p>
+      `;
+    }
+
+    function createMiddleEasternUrbanBuilding(blockX, blockY, blockSize, bx, by) {
+      const w = 200 + Math.random() * 100;
+      const h = 200 + Math.random() * 100;
+      const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+      const y = blockY + Math.random() * (blockSize - h - 60) + 30;
+      
+      const building = {
+        x, y, w, h,
+        color: MIDDLE_EASTERN_COLORS.stucco[Math.floor(Math.random() * MIDDLE_EASTERN_COLORS.stucco.length)],
+        style: 'urban',
+        rooms: [],
+        walls: [],
+        arches: [],
+        courtyard: null
+      };
+      
+      const courtyardSize = Math.min(w, h) * (0.3 + Math.random() * 0.1);
+      const courtyardX = x + (w - courtyardSize) / 2;
+      const courtyardY = y + (h - courtyardSize) / 2;
+      building.courtyard = {
+        x: courtyardX,
+        y: courtyardY,
+        w: courtyardSize,
+        h: courtyardSize
+      };
+      
+      const doorData = calculateDoorPosition(x, y, w, h, bx, by, blockSize);
+      building.doorX = doorData.doorX;
+      building.doorY = doorData.doorY;
+      building.doorW = doorData.doorW;
+      building.doorH = doorData.doorH;
+      
+      return building;
+    }
+
+    function createMiddleEasternCompound(blockX, blockY, blockSize, bx, by) {
+      const w = 250 + Math.random() * 150;
+      const h = 250 + Math.random() * 150;
+      const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+      const y = blockY + Math.random() * (blockSize - h - 60) + 30;
+      
+      const building = {
+        x, y, w, h,
+        color: MIDDLE_EASTERN_COLORS.stucco[Math.floor(Math.random() * MIDDLE_EASTERN_COLORS.stucco.length)],
+        style: 'compound',
+        rooms: [],
+        walls: [],
+        courtyard: null
+      };
+      
+      const wallThickness = 15;
+      building.walls.push(
+        { x: x, y: y, w: w, h: wallThickness },
+        { x: x, y: y + h - wallThickness, w: w, h: wallThickness },
+        { x: x, y: y, w: wallThickness, h: h },
+        { x: x + w - wallThickness, y: y, w: wallThickness, h: h }
+      );
+      
+      const courtyardMargin = 60;
+      building.courtyard = {
+        x: x + courtyardMargin,
+        y: y + courtyardMargin,
+        w: w - courtyardMargin * 2,
+        h: h - courtyardMargin * 2
+      };
+      
+      const doorData = calculateDoorPosition(x, y, w, h, bx, by, blockSize);
+      building.doorX = doorData.doorX;
+      building.doorY = doorData.doorY;
+      building.doorW = doorData.doorW * 1.5;
+      building.doorH = doorData.doorH * 1.5;
+      
+      return building;
+    }
+
+    function createMiddleEasternHouse(blockX, blockY, blockSize, bx, by) {
+      const w = 180 + Math.random() * 140;
+      const h = 180 + Math.random() * 140;
+      const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+      const y = blockY + Math.random() * (blockSize - h - 60) + 30;
+      
+      const building = {
+        x, y, w, h,
+        color: MIDDLE_EASTERN_COLORS.stucco[Math.floor(Math.random() * MIDDLE_EASTERN_COLORS.stucco.length)],
+        style: 'house',
+        rooms: [],
+        walls: [],
+        courtyard: null
+      };
+      
+      if (Math.random() > 0.5 && w > 200 && h > 200) {
+        const smallCourtyardSize = Math.min(w, h) * 0.25;
+        building.courtyard = {
+          x: x + (w - smallCourtyardSize) / 2,
+          y: y + (h - smallCourtyardSize) / 2,
+          w: smallCourtyardSize,
+          h: smallCourtyardSize
+        };
+      }
+      
+      const doorData = calculateDoorPosition(x, y, w, h, bx, by, blockSize);
+      building.doorX = doorData.doorX;
+      building.doorY = doorData.doorY;
+      building.doorW = doorData.doorW;
+      building.doorH = doorData.doorH;
+      
+      return building;
+    }
+
+    function calculateDoorPosition(x, y, w, h, bx, by, blockSize) {
+      const streetWidth = STREET_WIDTH;
+      const leftStreetX = bx * (blockSize + streetWidth);
+      const rightStreetX = bx * (blockSize + streetWidth) + streetWidth + blockSize;
+      const topStreetY = by * (blockSize + streetWidth);
+      const bottomStreetY = by * (blockSize + streetWidth) + streetWidth + blockSize;
+      
+      const distLeft = Math.abs(x - leftStreetX);
+      const distRight = Math.abs((x + w) - rightStreetX);
+      const distTop = Math.abs(y - topStreetY);
+      const distBottom = Math.abs((y + h) - bottomStreetY);
+      const min = Math.min(distLeft, distRight, distTop, distBottom);
+      
+      let doorX, doorY, doorW, doorH;
+      const doorSize = 40;
+      
+      if (min === distTop) {
+        doorW = doorSize; doorH = 5;
+        doorX = x + (w/2) - doorW/2; doorY = y - doorH;
+      } else if (min === distBottom) {
+        doorW = doorSize; doorH = 5;
+        doorX = x + (w/2) - doorW/2; doorY = y + h;
+      } else if (min === distLeft) {
+        doorW = 5; doorH = doorSize;
+        doorX = x - doorW; doorY = y + (h/2) - doorH/2;
+      } else {
+        doorW = 5; doorH = doorSize;
+        doorX = x + w; doorY = y + (h/2) - doorH/2;
+      }
+      
+      return { doorX, doorY, doorW, doorH };
+    }
+
+    function drawWorld() {
+      // Draw streets
+      ctx.fillStyle = '#888';
+      const blockSize = 800;
+      const blocksPerSide = Math.floor(WORLD_SIZE / (blockSize + STREET_WIDTH));
+      
+      for (let bx = 0; bx < blocksPerSide; bx++) {
+        const streetX = bx * (blockSize + STREET_WIDTH);
+        ctx.fillRect(streetX * scale, 0, STREET_WIDTH * scale, canvas.height);
+      }
+      
+      for (let by = 0; by < blocksPerSide; by++) {
+        const streetY = by * (blockSize + STREET_WIDTH);
+        ctx.fillRect(0, streetY * scale, canvas.width, STREET_WIDTH * scale);
+      }
+      
+      // Draw center marker
+      const worldCenter = WORLD_SIZE / 2;
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(worldCenter * scale, worldCenter * scale, 1200 * scale, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.arc(worldCenter * scale, worldCenter * scale, 2400 * scale, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Draw buildings
+      for (const b of buildings) {
+        // Main building
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x * scale, b.y * scale, b.w * scale, b.h * scale);
+        
+        // Courtyard
+        if (b.courtyard) {
+          ctx.fillStyle = MIDDLE_EASTERN_COLORS.courtyard;
+          ctx.fillRect(b.courtyard.x * scale, b.courtyard.y * scale, 
+                       b.courtyard.w * scale, b.courtyard.h * scale);
+        }
+        
+        // Walls (for compounds)
+        if (b.walls && b.walls.length > 0) {
+          ctx.fillStyle = b.color;
+          for (const wall of b.walls) {
+            ctx.fillRect(wall.x * scale, wall.y * scale, wall.w * scale, wall.h * scale);
+          }
+        }
+        
+        // Door
+        ctx.fillStyle = MIDDLE_EASTERN_COLORS.door;
+        ctx.fillRect(b.doorX * scale, b.doorY * scale, 
+                     Math.max(b.doorW * scale, 2), Math.max(b.doorH * scale, 2));
+        
+        // Building outline
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(b.x * scale, b.y * scale, b.w * scale, b.h * scale);
+      }
+    }
+
+    // Generate and draw
+    generateBuildings();
+    drawWorld();
+  </script>
+</body>
+</html>
