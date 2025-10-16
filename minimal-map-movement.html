@@ -31,6 +31,11 @@
       border-radius: 5px;
       z-index: 100;
     }
+    #commandWheel {
+      position: fixed;
+      z-index: 200;
+      pointer-events: none;
+    }
     #info {
       position: fixed;
       right: 20px;
@@ -47,9 +52,11 @@
 </head>
 <body>
   <canvas id="canvas"></canvas>
+  <canvas id="commandWheel"></canvas>
   <div id="controls">
     <strong>Controls:</strong><br>
-    WASD - Move
+    WASD - Move<br>
+    C - Command Wheel
   </div>
   <div id="info">
     <strong>World:</strong> <span id="worldSize"></span><br>
@@ -297,7 +304,13 @@
     // EVENT LISTENERS
     // ========================================
     window.addEventListener('keydown', e => {
-      keys[e.key.toLowerCase()] = true;
+      const key = e.key.toLowerCase();
+      keys[key] = true;
+      
+      // Toggle command wheel with 'C' key
+      if (key === 'c') {
+        toggleCommandWheel();
+      }
     });
 
     window.addEventListener('keyup', e => {
@@ -307,7 +320,319 @@
     window.addEventListener('resize', () => {
       W = canvas.width = window.innerWidth;
       H = canvas.height = window.innerHeight;
+      wheelCanvas.width = window.innerWidth;
+      wheelCanvas.height = window.innerHeight;
     });
+
+    // Mouse event listeners for command wheel
+    window.addEventListener('mousemove', e => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      updateCommandWheelHover();
+      drawCommandWheel();
+    });
+
+    window.addEventListener('click', e => {
+      handleCommandWheelClick();
+    });
+
+    // ========================================
+    // COMMAND WHEEL SYSTEM
+    // ========================================
+    // Command wheel state
+    const commandWheel = {
+      visible: false,
+      level: 1,  // 1 = categories, 2 = commands
+      x: 0,
+      y: 0,
+      radius: 120,
+      innerRadius: 30,
+      selectedCategory: null,
+      hoveredQuadrant: -1,
+      hoveredButton: -1,
+      categories: [
+        { name: 'Movement', color: '#4a90e2', commands: ['Move Here', 'Follow Me', 'Patrol Route', 'Hold Position'] },
+        { name: 'Combat', color: '#e24a4a', commands: ['Attack Target', 'Defensive Stance', 'Suppressive Fire', 'Retreat'] },
+        { name: 'Tactical', color: '#e2a44a', commands: ['Take Cover', 'Use Item', 'Interact', 'Search Area'] },
+        { name: 'Formation', color: '#4ae24a', commands: ['Line Formation', 'Column Formation', 'Spread Out', 'Regroup'] }
+      ]
+    };
+
+    // Command wheel canvas setup
+    const wheelCanvas = document.getElementById('commandWheel');
+    const wheelCtx = wheelCanvas.getContext('2d');
+    wheelCanvas.width = window.innerWidth;
+    wheelCanvas.height = window.innerHeight;
+
+    // Mouse position tracking (initialize to center)
+    const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+
+    // ========================================
+    // COMMAND WHEEL RENDERING
+    // ========================================
+    function drawCommandWheel() {
+      if (!commandWheel.visible) {
+        wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
+        wheelCanvas.style.pointerEvents = 'none';
+        return;
+      }
+      
+      wheelCanvas.style.pointerEvents = 'all';
+
+      wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
+
+      if (commandWheel.level === 1) {
+        drawLevel1();
+      } else if (commandWheel.level === 2) {
+        drawLevel2();
+      }
+    }
+
+    // Draw Level 1: Four quadrants
+    function drawLevel1() {
+      const cx = commandWheel.x;
+      const cy = commandWheel.y;
+      const r = commandWheel.radius;
+      const ir = commandWheel.innerRadius;
+
+      // Draw quadrants (top, right, bottom, left)
+      const quadrants = [
+        { startAngle: -Math.PI / 2, endAngle: 0, labelAngle: -Math.PI / 4, index: 0 },  // Top-right
+        { startAngle: 0, endAngle: Math.PI / 2, labelAngle: Math.PI / 4, index: 1 },     // Bottom-right
+        { startAngle: Math.PI / 2, endAngle: Math.PI, labelAngle: 3 * Math.PI / 4, index: 2 }, // Bottom-left
+        { startAngle: Math.PI, endAngle: 3 * Math.PI / 2, labelAngle: -3 * Math.PI / 4, index: 3 } // Top-left
+      ];
+
+      quadrants.forEach((quad, i) => {
+        wheelCtx.save();
+        wheelCtx.beginPath();
+        wheelCtx.arc(cx, cy, r, quad.startAngle, quad.endAngle);
+        wheelCtx.arc(cx, cy, ir, quad.endAngle, quad.startAngle, true);
+        wheelCtx.closePath();
+
+        // Fill with category color
+        const category = commandWheel.categories[i];
+        const alpha = (commandWheel.hoveredQuadrant === i) ? 0.9 : 0.7;
+        wheelCtx.fillStyle = category.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+        wheelCtx.fill();
+
+        // Border
+        wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        wheelCtx.lineWidth = 2;
+        wheelCtx.stroke();
+
+        // Draw label
+        const labelRadius = (r + ir) / 2;
+        const labelX = cx + Math.cos(quad.labelAngle) * labelRadius;
+        const labelY = cy + Math.sin(quad.labelAngle) * labelRadius;
+
+        wheelCtx.fillStyle = '#ffffff';
+        wheelCtx.font = 'bold 14px Arial';
+        wheelCtx.textAlign = 'center';
+        wheelCtx.textBaseline = 'middle';
+        wheelCtx.fillText(category.name, labelX, labelY);
+
+        wheelCtx.restore();
+      });
+
+      // Draw center circle
+      wheelCtx.beginPath();
+      wheelCtx.arc(cx, cy, ir, 0, Math.PI * 2);
+      wheelCtx.fillStyle = 'rgba(50, 50, 50, 0.9)';
+      wheelCtx.fill();
+      wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      wheelCtx.lineWidth = 2;
+      wheelCtx.stroke();
+
+      // Draw "C" in center
+      wheelCtx.fillStyle = '#ffffff';
+      wheelCtx.font = 'bold 16px Arial';
+      wheelCtx.textAlign = 'center';
+      wheelCtx.textBaseline = 'middle';
+      wheelCtx.fillText('C', cx, cy);
+    }
+
+    // Draw Level 2: Four command buttons
+    function drawLevel2() {
+      const cx = commandWheel.x;
+      const cy = commandWheel.y;
+      const r = commandWheel.radius;
+      const ir = commandWheel.innerRadius;
+      const category = commandWheel.categories[commandWheel.selectedCategory];
+
+      // Draw quadrants for commands
+      const quadrants = [
+        { startAngle: -Math.PI / 2, endAngle: 0, labelAngle: -Math.PI / 4, index: 0 },
+        { startAngle: 0, endAngle: Math.PI / 2, labelAngle: Math.PI / 4, index: 1 },
+        { startAngle: Math.PI / 2, endAngle: Math.PI, labelAngle: 3 * Math.PI / 4, index: 2 },
+        { startAngle: Math.PI, endAngle: 3 * Math.PI / 2, labelAngle: -3 * Math.PI / 4, index: 3 }
+      ];
+
+      quadrants.forEach((quad, i) => {
+        wheelCtx.save();
+        wheelCtx.beginPath();
+        wheelCtx.arc(cx, cy, r, quad.startAngle, quad.endAngle);
+        wheelCtx.arc(cx, cy, ir, quad.endAngle, quad.startAngle, true);
+        wheelCtx.closePath();
+
+        // Fill with category color
+        const alpha = (commandWheel.hoveredButton === i) ? 0.9 : 0.6;
+        wheelCtx.fillStyle = category.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+        wheelCtx.fill();
+
+        // Border
+        wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        wheelCtx.lineWidth = 2;
+        wheelCtx.stroke();
+
+        // Draw command label
+        const labelRadius = (r + ir) / 2;
+        const labelX = cx + Math.cos(quad.labelAngle) * labelRadius;
+        const labelY = cy + Math.sin(quad.labelAngle) * labelRadius;
+
+        wheelCtx.fillStyle = '#ffffff';
+        wheelCtx.font = 'bold 12px Arial';
+        wheelCtx.textAlign = 'center';
+        wheelCtx.textBaseline = 'middle';
+        
+        // Split text into multiple lines if needed
+        const commandName = category.commands[i];
+        const words = commandName.split(' ');
+        if (words.length > 1) {
+          wheelCtx.fillText(words[0], labelX, labelY - 7);
+          wheelCtx.fillText(words.slice(1).join(' '), labelX, labelY + 7);
+        } else {
+          wheelCtx.fillText(commandName, labelX, labelY);
+        }
+
+        wheelCtx.restore();
+      });
+
+      // Draw center circle with back button
+      wheelCtx.beginPath();
+      wheelCtx.arc(cx, cy, ir, 0, Math.PI * 2);
+      wheelCtx.fillStyle = 'rgba(50, 50, 50, 0.9)';
+      wheelCtx.fill();
+      wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      wheelCtx.lineWidth = 2;
+      wheelCtx.stroke();
+
+      // Draw back arrow
+      wheelCtx.fillStyle = '#ffffff';
+      wheelCtx.font = 'bold 20px Arial';
+      wheelCtx.textAlign = 'center';
+      wheelCtx.textBaseline = 'middle';
+      wheelCtx.fillText('←', cx, cy);
+    }
+
+    // ========================================
+    // COMMAND WHEEL INTERACTION
+    // ========================================
+    function updateCommandWheelHover() {
+      if (!commandWheel.visible) return;
+
+      const dx = mouse.x - commandWheel.x;
+      const dy = mouse.y - commandWheel.y;
+      const dist = Math.hypot(dx, dy);
+
+      // Check if mouse is in center circle
+      if (dist < commandWheel.innerRadius) {
+        commandWheel.hoveredQuadrant = -1;
+        commandWheel.hoveredButton = -1;
+        return;
+      }
+
+      // Check if mouse is within wheel radius
+      if (dist > commandWheel.radius) {
+        commandWheel.hoveredQuadrant = -1;
+        commandWheel.hoveredButton = -1;
+        return;
+      }
+
+      // Calculate angle (0 = right, counter-clockwise)
+      let angle = Math.atan2(dy, dx);
+      if (angle < 0) angle += Math.PI * 2;
+
+      // Convert to quadrant (0 = top-right, 1 = bottom-right, 2 = bottom-left, 3 = top-left)
+      // Adjust so 0 degrees points up
+      angle = angle + Math.PI / 4; // Shift by 45 degrees
+      if (angle >= Math.PI * 2) angle -= Math.PI * 2;
+      
+      const quadrant = Math.floor(angle / (Math.PI / 2)) % 4;
+
+      if (commandWheel.level === 1) {
+        commandWheel.hoveredQuadrant = quadrant;
+      } else {
+        commandWheel.hoveredButton = quadrant;
+      }
+    }
+
+    function handleCommandWheelClick() {
+      if (!commandWheel.visible) return;
+
+      const dx = mouse.x - commandWheel.x;
+      const dy = mouse.y - commandWheel.y;
+      const dist = Math.hypot(dx, dy);
+
+      // Click on center circle
+      if (dist < commandWheel.innerRadius) {
+        if (commandWheel.level === 2) {
+          // Back to level 1
+          commandWheel.level = 1;
+          commandWheel.selectedCategory = null;
+          commandWheel.hoveredButton = -1;
+          drawCommandWheel();
+        }
+        return;
+      }
+
+      // Click outside wheel
+      if (dist > commandWheel.radius) {
+        return;
+      }
+
+      if (commandWheel.level === 1 && commandWheel.hoveredQuadrant >= 0) {
+        // Expand to level 2
+        commandWheel.selectedCategory = commandWheel.hoveredQuadrant;
+        commandWheel.level = 2;
+        commandWheel.hoveredQuadrant = -1;
+        drawCommandWheel();
+      } else if (commandWheel.level === 2 && commandWheel.hoveredButton >= 0) {
+        // Execute command
+        const category = commandWheel.categories[commandWheel.selectedCategory];
+        const command = category.commands[commandWheel.hoveredButton];
+        executeCommand(category.name, command);
+        
+        // Close wheel
+        commandWheel.visible = false;
+        commandWheel.level = 1;
+        commandWheel.selectedCategory = null;
+        commandWheel.hoveredButton = -1;
+        drawCommandWheel();
+      }
+    }
+
+    function toggleCommandWheel() {
+      commandWheel.visible = !commandWheel.visible;
+      
+      if (commandWheel.visible) {
+        // Position at mouse cursor
+        commandWheel.x = mouse.x;
+        commandWheel.y = mouse.y;
+        commandWheel.level = 1;
+        commandWheel.selectedCategory = null;
+        commandWheel.hoveredQuadrant = -1;
+        commandWheel.hoveredButton = -1;
+      }
+      
+      drawCommandWheel();
+    }
+
+    // Placeholder command execution
+    function executeCommand(category, command) {
+      console.log(`[Command Wheel] Executing: ${category} > ${command}`);
+      // Placeholder - no actual logic yet
+    }
 
     // ========================================
     // INITIALIZATION
