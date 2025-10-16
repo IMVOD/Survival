@@ -33,6 +33,10 @@
     }
     #commandWheel {
       position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       z-index: 200;
       pointer-events: none;
     }
@@ -370,6 +374,19 @@
     // ========================================
     // COMMAND WHEEL RENDERING
     // ========================================
+    // Helper function to convert hex color to rgba
+    function hexToRgba(hex, alpha) {
+      // Remove # if present
+      hex = hex.replace('#', '');
+      
+      // Parse hex values
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
     function drawCommandWheel() {
       if (!commandWheel.visible) {
         wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
@@ -413,7 +430,7 @@
         // Fill with category color
         const category = commandWheel.categories[i];
         const alpha = (commandWheel.hoveredQuadrant === i) ? 0.9 : 0.7;
-        wheelCtx.fillStyle = category.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+        wheelCtx.fillStyle = hexToRgba(category.color, alpha);
         wheelCtx.fill();
 
         // Border
@@ -477,7 +494,7 @@
 
         // Fill with category color
         const alpha = (commandWheel.hoveredButton === i) ? 0.9 : 0.6;
-        wheelCtx.fillStyle = category.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
+        wheelCtx.fillStyle = hexToRgba(category.color, alpha);
         wheelCtx.fill();
 
         // Border
@@ -586,8 +603,14 @@
         return;
       }
 
-      // Click outside wheel
+      // Click outside wheel - close it
       if (dist > commandWheel.radius) {
+        commandWheel.visible = false;
+        commandWheel.level = 1;
+        commandWheel.selectedCategory = null;
+        commandWheel.hoveredQuadrant = -1;
+        commandWheel.hoveredButton = -1;
+        drawCommandWheel();
         return;
       }
 
