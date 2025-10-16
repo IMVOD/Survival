@@ -17,7 +17,7 @@
       display: block;
       width: 100vw;
       height: 100vh;
-      background: #0a0e14;
+      background: #c2a878;
       cursor: crosshair;
     }
     #controls {
@@ -213,7 +213,7 @@
     // Draws the terrain tiles and player character
     function draw() {
       // Clear screen
-      ctx.fillStyle = '#0a0e14';
+      ctx.fillStyle = '#c2a878';
       ctx.fillRect(0, 0, W, H);
 
       // Apply camera transformation
@@ -231,13 +231,20 @@
 
         // Draw tile based on type
         if (tile.type === 'grass') {
-          const shade = 30 + tile.shade * 20;
-          ctx.fillStyle = `rgb(${shade}, ${shade + 35}, ${shade + 10})`;
+          // Desert sand tiles - various warm yellows, tans, and oranges
+          const baseR = 210 + tile.shade * 30;
+          const baseG = 180 + tile.shade * 25;
+          const baseB = 140 + tile.shade * 20;
+          ctx.fillStyle = `rgb(${baseR}, ${baseG}, ${baseB})`;
         } else if (tile.type === 'street') {
-          const shade = 50 + tile.shade * 15;
-          ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade + 5})`;
+          // Desert terrain/sandy roads - lighter sandy color
+          const baseR = 195 + tile.shade * 20;
+          const baseG = 165 + tile.shade * 18;
+          const baseB = 120 + tile.shade * 15;
+          ctx.fillStyle = `rgb(${baseR}, ${baseG}, ${baseB})`;
         } else {
-          ctx.fillStyle = 'rgba(80,80,90,0.3)';
+          // Desert path - distinctive brownish color
+          ctx.fillStyle = 'rgba(160, 120, 80, 0.6)';
         }
         ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
       }
