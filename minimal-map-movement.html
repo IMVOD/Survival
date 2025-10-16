@@ -333,6 +333,8 @@
     });
 
     window.addEventListener('click', e => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
       handleCommandWheelClick();
     });
 
