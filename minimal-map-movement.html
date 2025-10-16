@@ -17,8 +17,14 @@
       display: block;
       width: 100vw;
       height: 100vh;
-      background: #c2a878;
       cursor: crosshair;
+    }
+    #canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      background: #c2a878;
+      z-index: 1;
     }
     #controls {
       position: fixed;
@@ -33,7 +39,9 @@
     }
     #commandWheel {
       position: fixed;
-      z-index: 200;
+      top: 0;
+      left: 0;
+      z-index: 1000;
       pointer-events: none;
     }
     #info {
@@ -322,20 +330,6 @@
       H = canvas.height = window.innerHeight;
       wheelCanvas.width = window.innerWidth;
       wheelCanvas.height = window.innerHeight;
-    });
-
-    // Mouse event listeners for command wheel
-    window.addEventListener('mousemove', e => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-      updateCommandWheelHover();
-      drawCommandWheel();
-    });
-
-    window.addEventListener('click', e => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-      handleCommandWheelClick();
     });
 
     // ========================================
@@ -654,6 +648,24 @@
       console.log(`[Command Wheel] Executing: ${category} > ${command}`);
       // Placeholder - no actual logic yet
     }
+
+    // ========================================
+    // COMMAND WHEEL EVENT LISTENERS
+    // ========================================
+    // Mouse event listeners for command wheel
+    window.addEventListener('mousemove', e => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      updateCommandWheelHover();
+      drawCommandWheel();
+    });
+
+    window.addEventListener('click', e => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      updateCommandWheelHover();
+      handleCommandWheelClick();
+    });
 
     // ========================================
     // INITIALIZATION
