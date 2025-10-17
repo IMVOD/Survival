@@ -173,6 +173,9 @@
 
     // Terrain tiles array
     let terrainTiles = [];
+    
+    // Buildings array
+    let buildings = [];
 
     // Time tracking
     let lastTime = performance.now();
@@ -234,6 +237,168 @@
     }
 
     // ========================================
+    // BUILDING GENERATION - MIDDLE EASTERN STYLE
+    // ========================================
+    // Generates Middle Eastern-style buildings with:
+    // - Modular components (walls, doors, flat roofs)
+    // - Earth tone colors (stucco, adobe)
+    // - Density based on distance from center
+    // - Proper hitboxes and door functionality
+    function generateBuildings() {
+      buildings = [];
+      const blockSize = 800;
+      const streetWidth = STREET_WIDTH;
+      const blocksPerSide = Math.floor(WORLD_SIZE / (blockSize + streetWidth));
+      const worldCenter = WORLD_SIZE / 2;
+      
+      // Calculate maximum distance from center for density calculation
+      const maxDistFromCenter = Math.hypot(worldCenter, worldCenter);
+      
+      for (let bx = 0; bx < blocksPerSide; bx++) {
+        for (let by = 0; by < blocksPerSide; by++) {
+          const blockX = bx * (blockSize + streetWidth) + streetWidth;
+          const blockY = by * (blockSize + streetWidth) + streetWidth;
+          const blockCenterX = blockX + blockSize / 2;
+          const blockCenterY = blockY + blockSize / 2;
+          
+          // Calculate distance from world center to determine building density
+          const distFromCenter = Math.hypot(blockCenterX - worldCenter, blockCenterY - worldCenter);
+          const densityFactor = 1 - (distFromCenter / maxDistFromCenter);
+          
+          // More buildings near center (3-5), fewer at edges (1-2)
+          const minBuildings = densityFactor > 0.5 ? 3 : (densityFactor > 0.3 ? 2 : 1);
+          const maxBuildings = densityFactor > 0.5 ? 5 : (densityFactor > 0.3 ? 3 : 2);
+          const housesInBlock = minBuildings + Math.floor(Math.random() * (maxBuildings - minBuildings + 1));
+          
+          for (let h = 0; h < housesInBlock; h++) {
+            // Building size - slightly smaller, more modular (Middle Eastern style)
+            const w = 120 + Math.random() * 100;
+            const hh = 120 + Math.random() * 100;
+            const x = blockX + Math.random() * (blockSize - w - 60) + 30;
+            const y = blockY + Math.random() * (blockSize - hh - 60) + 30;
+            
+            // Check overlap with existing buildings (maintain spacing)
+            let overlap = false;
+            for (const other of buildings) {
+              if (x < other.x + other.w + 40 && x + w + 40 > other.x &&
+                  y < other.y + other.h + 40 && y + hh + 40 > other.y) {
+                overlap = true;
+                break;
+              }
+            }
+            if (overlap) continue;
+            
+            // Dynamic door placement: face nearest street edge
+            const leftStreetX = bx * (blockSize + streetWidth);
+            const rightStreetX = blockX + blockSize;
+            const topStreetY = by * (blockSize + streetWidth);
+            const bottomStreetY = blockY + blockSize;
+            const distLeft = Math.abs(x - leftStreetX);
+            const distRight = Math.abs((x + w) - rightStreetX);
+            const distTop = Math.abs(y - topStreetY);
+            const distBottom = Math.abs((y + hh) - bottomStreetY);
+            const min = Math.min(distLeft, distRight, distTop, distBottom);
+            
+            let doorX, doorY, doorW, doorH, doorSide;
+            const doorSize = 35; // Middle Eastern arched door size
+            
+            if (min === distTop) {
+              doorSide = 'north';
+              doorW = doorSize;
+              doorH = 5;
+              doorX = x + (w / 2) - doorW / 2;
+              doorY = y - doorH;
+            } else if (min === distBottom) {
+              doorSide = 'south';
+              doorW = doorSize;
+              doorH = 5;
+              doorX = x + (w / 2) - doorW / 2;
+              doorY = y + hh;
+            } else if (min === distLeft) {
+              doorSide = 'west';
+              doorW = 5;
+              doorH = doorSize;
+              doorX = x - doorW;
+              doorY = y + (hh / 2) - doorH / 2;
+            } else {
+              doorSide = 'east';
+              doorW = 5;
+              doorH = doorSize;
+              doorX = x + w;
+              doorY = y + (hh / 2) - doorH / 2;
+            }
+            
+            // Middle Eastern color palette: earth tones, stucco, adobe
+            // Warm browns, tans, terracotta, sandy yellows
+            const colorVariation = Math.random();
+            let wallColor, roofColor;
+            
+            if (colorVariation < 0.3) {
+              // Sandy/beige stucco
+              wallColor = `rgb(${210 + Math.random() * 20}, ${180 + Math.random() * 20}, ${140 + Math.random() * 20})`;
+              roofColor = `rgb(${180 + Math.random() * 15}, ${150 + Math.random() * 15}, ${110 + Math.random() * 15})`;
+            } else if (colorVariation < 0.6) {
+              // Terracotta/clay
+              wallColor = `rgb(${190 + Math.random() * 25}, ${130 + Math.random() * 20}, ${90 + Math.random() * 15})`;
+              roofColor = `rgb(${170 + Math.random() * 15}, ${110 + Math.random() * 15}, ${70 + Math.random() * 10})`;
+            } else {
+              // Warm tan/ochre
+              wallColor = `rgb(${200 + Math.random() * 20}, ${160 + Math.random() * 20}, ${110 + Math.random() * 20})`;
+              roofColor = `rgb(${180 + Math.random() * 15}, ${140 + Math.random() * 15}, ${90 + Math.random() * 15})`;
+            }
+            
+            const building = {
+              x, y, w, h: hh,
+              doorX, doorY, doorW, doorH, doorSide,
+              wallColor, roofColor,
+              // Interior floor color (darker)
+              floorColor: `rgb(${120 + Math.random() * 30}, ${100 + Math.random() * 25}, ${70 + Math.random() * 20})`,
+              wallThickness: 6, // Thick walls for Middle Eastern style
+              hasCourtyard: Math.random() > 0.7, // Some buildings have courtyards
+              distFromCenter: distFromCenter
+            };
+            
+            buildings.push(building);
+          }
+        }
+      }
+      
+      console.log(`Generated ${buildings.length} Middle Eastern-style buildings`);
+    }
+
+    // ========================================
+    // BUILDING COLLISION DETECTION
+    // ========================================
+    // Check if a position collides with any building
+    // Returns the building if collision, null if no collision
+    function checkBuildingCollision(x, y, radius) {
+      for (const b of buildings) {
+        // Check if player is in door area (allow passage)
+        const inDoorX = x + radius > b.doorX && x - radius < b.doorX + b.doorW;
+        const inDoorY = y + radius > b.doorY && y - radius < b.doorY + b.doorH;
+        
+        if (inDoorX && inDoorY) {
+          return null; // Allow passage through door
+        }
+        
+        // Check if player is inside building (allow if inside)
+        const insideX = x > b.x && x < b.x + b.w;
+        const insideY = y > b.y && y < b.y + b.h;
+        
+        if (insideX && insideY) {
+          return null; // Inside building, no collision
+        }
+        
+        // Check collision with building exterior
+        if (x + radius > b.x && x - radius < b.x + b.w &&
+            y + radius > b.y && y - radius < b.y + b.h) {
+          return b; // Collision with building wall
+        }
+      }
+      return null;
+    }
+
+    // ========================================
     // SQUAD AI AND MOVEMENT
     // ========================================
     // Update squad member AI based on their current state
@@ -270,8 +435,20 @@
         const dirX = dx / dist;
         const dirY = dy / dist;
         
-        unit.x += dirX * unit.speed * dt;
-        unit.y += dirY * unit.speed * dt;
+        const newX = unit.x + dirX * unit.speed * dt;
+        const newY = unit.y + dirY * unit.speed * dt;
+        
+        // Check collision with buildings
+        const collisionX = checkBuildingCollision(newX, unit.y, unit.radius);
+        const collisionY = checkBuildingCollision(unit.x, newY, unit.radius);
+        
+        // Apply movement only if no collision
+        if (!collisionX) {
+          unit.x = newX;
+        }
+        if (!collisionY) {
+          unit.y = newY;
+        }
         
         // Keep within world bounds
         unit.x = Math.max(unit.radius, Math.min(WORLD_SIZE - unit.radius, unit.x));
@@ -358,9 +535,21 @@
         dx /= len;
         dy /= len;
         
-        // Apply movement
-        player.x += dx * player.speed * dt;
-        player.y += dy * player.speed * dt;
+        // Apply movement with collision detection
+        const newX = player.x + dx * player.speed * dt;
+        const newY = player.y + dy * player.speed * dt;
+        
+        // Check collision with buildings
+        const collisionX = checkBuildingCollision(newX, player.y, player.radius);
+        const collisionY = checkBuildingCollision(player.x, newY, player.radius);
+        
+        // Apply movement only if no collision
+        if (!collisionX) {
+          player.x = newX;
+        }
+        if (!collisionY) {
+          player.y = newY;
+        }
         
         // Keep player within world bounds
         player.x = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.x));
@@ -418,6 +607,145 @@
           ctx.fillStyle = 'rgba(160, 120, 80, 0.6)';
         }
         ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+      }
+
+      // ========================================
+      // DRAW BUILDINGS - MIDDLE EASTERN STYLE
+      // ========================================
+      // Draw buildings with modular Middle Eastern components
+      for (const b of buildings) {
+        // Cull buildings outside viewport for performance
+        const screenX = b.x - camera.x + W/2;
+        const screenY = b.y - camera.y + H/2;
+        if (screenX + b.w < 0 || screenX > W || screenY + b.h < 0 || screenY > H) {
+          continue;
+        }
+        
+        // 1. Draw interior floor (visible through door/windows)
+        ctx.fillStyle = b.floorColor;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        
+        // 2. Draw main walls (stucco/adobe style)
+        ctx.fillStyle = b.wallColor;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        
+        // 3. Add texture variation to walls (stucco effect)
+        for (let i = 0; i < 8; i++) {
+          const tx = b.x + Math.random() * b.w;
+          const ty = b.y + Math.random() * b.h;
+          const size = 3 + Math.random() * 4;
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.05 + Math.random() * 0.05})`;
+          ctx.fillRect(tx, ty, size, size);
+        }
+        
+        // 4. Draw flat roof edge (subtle shadow)
+        ctx.fillStyle = b.roofColor;
+        ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
+        
+        // Redraw walls on top
+        ctx.fillStyle = b.wallColor;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        
+        // 5. Draw wall outlines (thick, visible)
+        ctx.strokeStyle = `rgba(0, 0, 0, 0.4)`;
+        ctx.lineWidth = b.wallThickness;
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        
+        // 6. Draw decorative details (small windows, vents)
+        // Small window openings (not enterable, just decorative)
+        const numWindows = Math.floor(Math.random() * 3);
+        for (let i = 0; i < numWindows; i++) {
+          const wx = b.x + 20 + Math.random() * (b.w - 40);
+          const wy = b.y + 20 + Math.random() * (b.h - 40);
+          const wSize = 8;
+          
+          // Window recess (dark)
+          ctx.fillStyle = 'rgba(50, 40, 30, 0.7)';
+          ctx.fillRect(wx - 1, wy - 1, wSize + 2, wSize + 2);
+          
+          // Window frame
+          ctx.strokeStyle = 'rgba(80, 60, 40, 0.9)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(wx, wy, wSize, wSize);
+        }
+        
+        // 7. Draw door (arched Middle Eastern style)
+        // Door opening
+        ctx.fillStyle = 'rgba(40, 30, 20, 0.9)';
+        ctx.fillRect(b.doorX, b.doorY, b.doorW, b.doorH);
+        
+        // Door frame (decorative arch suggestion)
+        if (b.doorSide === 'north' || b.doorSide === 'south') {
+          // Horizontal door - draw arch-like decoration
+          ctx.strokeStyle = 'rgba(120, 80, 50, 0.9)';
+          ctx.lineWidth = 3;
+          
+          // Left pillar
+          ctx.beginPath();
+          ctx.moveTo(b.doorX - 2, b.doorY);
+          ctx.lineTo(b.doorX - 2, b.doorY + b.doorH);
+          ctx.stroke();
+          
+          // Right pillar
+          ctx.beginPath();
+          ctx.moveTo(b.doorX + b.doorW + 2, b.doorY);
+          ctx.lineTo(b.doorX + b.doorW + 2, b.doorY + b.doorH);
+          ctx.stroke();
+          
+          // Arch top (simplified semicircle suggestion)
+          ctx.beginPath();
+          ctx.arc(
+            b.doorX + b.doorW / 2,
+            b.doorSide === 'north' ? b.doorY : b.doorY + b.doorH,
+            b.doorW / 2,
+            b.doorSide === 'north' ? 0 : Math.PI,
+            b.doorSide === 'north' ? Math.PI : Math.PI * 2
+          );
+          ctx.stroke();
+        } else {
+          // Vertical door
+          ctx.strokeStyle = 'rgba(120, 80, 50, 0.9)';
+          ctx.lineWidth = 3;
+          
+          // Top pillar
+          ctx.beginPath();
+          ctx.moveTo(b.doorX, b.doorY - 2);
+          ctx.lineTo(b.doorX + b.doorW, b.doorY - 2);
+          ctx.stroke();
+          
+          // Bottom pillar
+          ctx.beginPath();
+          ctx.moveTo(b.doorX, b.doorY + b.doorH + 2);
+          ctx.lineTo(b.doorX + b.doorW, b.doorY + b.doorH + 2);
+          ctx.stroke();
+          
+          // Arch side
+          ctx.beginPath();
+          ctx.arc(
+            b.doorSide === 'west' ? b.doorX : b.doorX + b.doorW,
+            b.doorY + b.doorH / 2,
+            b.doorH / 2,
+            b.doorSide === 'west' ? Math.PI / 2 : -Math.PI / 2,
+            b.doorSide === 'west' ? Math.PI * 1.5 : Math.PI / 2
+          );
+          ctx.stroke();
+        }
+        
+        // 8. Optional: Courtyard (if building has one)
+        if (b.hasCourtyard) {
+          const cySize = 30;
+          const cyX = b.x + b.w / 2 - cySize / 2;
+          const cyY = b.y + b.h / 2 - cySize / 2;
+          
+          // Courtyard floor (sandy)
+          ctx.fillStyle = `rgb(${200 + Math.random() * 20}, ${170 + Math.random() * 20}, ${120 + Math.random() * 20})`;
+          ctx.fillRect(cyX, cyY, cySize, cySize);
+          
+          // Courtyard border
+          ctx.strokeStyle = 'rgba(150, 120, 80, 0.6)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(cyX, cyY, cySize, cySize);
+        }
       }
 
       // Draw player
@@ -1032,6 +1360,7 @@
       console.log(`Player Start: (${player.x}, ${player.y})`);
       
       generateTerrain();
+      generateBuildings();
       updateInfo();
       lastTime = performance.now();
       loop();
