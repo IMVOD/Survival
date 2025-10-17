@@ -76,24 +76,38 @@
   <script>
     // ========================================
     // MINIMAL MAP AND MOVEMENT SYSTEM
+    // WITH MIDDLE EASTERN TOWN GENERATION
     // ========================================
     // This is a standalone, self-contained system for testing
-    // the world map structure and player movement in isolation.
+    // the world map structure, player movement, and Middle Eastern-style
+    // town generation in isolation.
     //
     // Features included:
     // - Fixed-size world grid (WORLD_SIZE = 8000 units)
     // - Tile division (TILE_SIZE = 16, blockSize = 800)
-    // - Grid-based terrain with streets and grass
-    // - Player character with WASD movement
+    // - Grid-based terrain with streets and desert sand
+    // - Middle Eastern-style buildings with modular components
+    // - Density-based building placement (denser near center)
+    // - Building hitboxes, doors, floors, and interiors
+    // - Player character with WASD movement and collision
     // - Camera that follows the player
-    // - Simple rendering of tiles and player
+    // - Squad members with formation system
+    // - Command wheel for squad control
+    //
+    // Middle Eastern architectural features:
+    // - Earth tone colors (stucco, adobe, terracotta)
+    // - Arched doorways (traditional Islamic architecture)
+    // - Flat roofs with parapets
+    // - Small decorative windows
+    // - Optional courtyards with fountains
+    // - Colored doors (blue, green, terracotta)
+    // - Thick walls typical of desert construction
     //
     // Features NOT included (by design):
-    // - Buildings, zombies, loot, combat
-    // - Fog of war, minimap, HUD
+    // - Zombies, loot, combat, gameplay mechanics
+    // - Fog of war, minimap (basic), advanced HUD
     // - Inventory, weapons, items
     // - Day/night cycle, audio
-    // - Any gameplay mechanics
     // ========================================
 
     // World Constants
@@ -271,9 +285,11 @@
           const housesInBlock = minBuildings + Math.floor(Math.random() * (maxBuildings - minBuildings + 1));
           
           for (let h = 0; h < housesInBlock; h++) {
-            // Building size - slightly smaller, more modular (Middle Eastern style)
-            const w = 120 + Math.random() * 100;
-            const hh = 120 + Math.random() * 100;
+            // Building size - vary more near center for realistic urban feel
+            // Center buildings can be larger, edge buildings smaller
+            const sizeMultiplier = 0.7 + (densityFactor * 0.5);
+            const w = (100 + Math.random() * 120) * sizeMultiplier;
+            const hh = (100 + Math.random() * 120) * sizeMultiplier;
             const x = blockX + Math.random() * (blockSize - w - 60) + 30;
             const y = blockY + Math.random() * (blockSize - hh - 60) + 30;
             
@@ -347,6 +363,17 @@
               roofColor = `rgb(${180 + Math.random() * 15}, ${140 + Math.random() * 15}, ${90 + Math.random() * 15})`;
             }
             
+            // Generate decorative windows (store positions for consistent rendering)
+            const numWindows = 1 + Math.floor(Math.random() * 3);
+            const windows = [];
+            for (let wi = 0; wi < numWindows; wi++) {
+              windows.push({
+                x: x + 20 + Math.random() * (w - 40),
+                y: y + 20 + Math.random() * (hh - 40),
+                size: 8 + Math.floor(Math.random() * 4)
+              });
+            }
+            
             const building = {
               x, y, w, h: hh,
               doorX, doorY, doorW, doorH, doorSide,
@@ -355,7 +382,11 @@
               floorColor: `rgb(${120 + Math.random() * 30}, ${100 + Math.random() * 25}, ${70 + Math.random() * 20})`,
               wallThickness: 6, // Thick walls for Middle Eastern style
               hasCourtyard: Math.random() > 0.7, // Some buildings have courtyards
-              distFromCenter: distFromCenter
+              distFromCenter: distFromCenter,
+              windows: windows,
+              // Add architectural style variations
+              hasRoofParapet: Math.random() > 0.5, // Decorative roof edge
+              hasColoredDoor: Math.random() > 0.6 // Some doors have decorative colors
             };
             
             buildings.push(building);
@@ -629,16 +660,7 @@
         ctx.fillStyle = b.wallColor;
         ctx.fillRect(b.x, b.y, b.w, b.h);
         
-        // 3. Add texture variation to walls (stucco effect)
-        for (let i = 0; i < 8; i++) {
-          const tx = b.x + Math.random() * b.w;
-          const ty = b.y + Math.random() * b.h;
-          const size = 3 + Math.random() * 4;
-          ctx.fillStyle = `rgba(255, 255, 255, ${0.05 + Math.random() * 0.05})`;
-          ctx.fillRect(tx, ty, size, size);
-        }
-        
-        // 4. Draw flat roof edge (subtle shadow)
+        // 4. Draw flat roof edge (subtle shadow for depth)
         ctx.fillStyle = b.roofColor;
         ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
         
@@ -646,35 +668,61 @@
         ctx.fillStyle = b.wallColor;
         ctx.fillRect(b.x, b.y, b.w, b.h);
         
+        // Add roof parapet (decorative edge) if building has one
+        if (b.hasRoofParapet) {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(b.x - 2, b.y - 2, b.w + 4, b.h + 4);
+        }
+        
         // 5. Draw wall outlines (thick, visible)
         ctx.strokeStyle = `rgba(0, 0, 0, 0.4)`;
         ctx.lineWidth = b.wallThickness;
         ctx.strokeRect(b.x, b.y, b.w, b.h);
         
-        // 6. Draw decorative details (small windows, vents)
-        // Small window openings (not enterable, just decorative)
-        const numWindows = Math.floor(Math.random() * 3);
-        for (let i = 0; i < numWindows; i++) {
-          const wx = b.x + 20 + Math.random() * (b.w - 40);
-          const wy = b.y + 20 + Math.random() * (b.h - 40);
-          const wSize = 8;
-          
-          // Window recess (dark)
+        // 6. Draw decorative details (small windows using stored positions)
+        for (const win of b.windows) {
+          // Window recess (dark shadow)
           ctx.fillStyle = 'rgba(50, 40, 30, 0.7)';
-          ctx.fillRect(wx - 1, wy - 1, wSize + 2, wSize + 2);
+          ctx.fillRect(win.x - 1, win.y - 1, win.size + 2, win.size + 2);
           
-          // Window frame
+          // Window frame (wood or stone)
           ctx.strokeStyle = 'rgba(80, 60, 40, 0.9)';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(wx, wy, wSize, wSize);
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(win.x, win.y, win.size, win.size);
+          
+          // Optional: Arched window top for larger windows
+          if (win.size > 10) {
+            ctx.beginPath();
+            ctx.arc(win.x + win.size / 2, win.y, win.size / 2, 0, Math.PI);
+            ctx.stroke();
+          }
         }
         
         // 7. Draw door (arched Middle Eastern style)
-        // Door opening
+        // Door opening (dark interior)
         ctx.fillStyle = 'rgba(40, 30, 20, 0.9)';
         ctx.fillRect(b.doorX, b.doorY, b.doorW, b.doorH);
         
-        // Door frame (decorative arch suggestion)
+        // Optional: Colored door panel (bright blue, green, or red - traditional Middle Eastern)
+        if (b.hasColoredDoor) {
+          const doorColors = [
+            'rgba(0, 100, 150, 0.7)',   // Deep blue
+            'rgba(0, 120, 80, 0.7)',    // Deep green
+            'rgba(140, 60, 40, 0.7)'    // Terracotta red
+          ];
+          const doorColor = doorColors[Math.floor(Math.random() * doorColors.length)];
+          
+          if (b.doorSide === 'north' || b.doorSide === 'south') {
+            ctx.fillStyle = doorColor;
+            ctx.fillRect(b.doorX + 2, b.doorY, b.doorW - 4, b.doorH);
+          } else {
+            ctx.fillStyle = doorColor;
+            ctx.fillRect(b.doorX, b.doorY + 2, b.doorW, b.doorH - 4);
+          }
+        }
+        
+        // Door frame (decorative arch)
         if (b.doorSide === 'north' || b.doorSide === 'south') {
           // Horizontal door - draw arch-like decoration
           ctx.strokeStyle = 'rgba(120, 80, 50, 0.9)';
@@ -692,7 +740,7 @@
           ctx.lineTo(b.doorX + b.doorW + 2, b.doorY + b.doorH);
           ctx.stroke();
           
-          // Arch top (simplified semicircle suggestion)
+          // Arch top (simplified semicircle)
           ctx.beginPath();
           ctx.arc(
             b.doorX + b.doorW / 2,
@@ -741,11 +789,23 @@
           ctx.fillStyle = `rgb(${200 + Math.random() * 20}, ${170 + Math.random() * 20}, ${120 + Math.random() * 20})`;
           ctx.fillRect(cyX, cyY, cySize, cySize);
           
-          // Courtyard border
-          ctx.strokeStyle = 'rgba(150, 120, 80, 0.6)';
+          // Courtyard border (decorative tiles)
+          ctx.strokeStyle = 'rgba(150, 120, 80, 0.8)';
           ctx.lineWidth = 2;
           ctx.strokeRect(cyX, cyY, cySize, cySize);
+          
+          // Small fountain or plant in center (decorative dot)
+          ctx.fillStyle = 'rgba(80, 120, 100, 0.6)';
+          ctx.beginPath();
+          ctx.arc(cyX + cySize / 2, cyY + cySize / 2, 3, 0, Math.PI * 2);
+          ctx.fill();
         }
+        
+        // 9. Add subtle shadows to create depth (optional enhancement)
+        // Shadow on south and east sides for 3D effect
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.fillRect(b.x + b.w, b.y + 3, 3, b.h - 3); // Right shadow
+        ctx.fillRect(b.x + 3, b.y + b.h, b.w - 3, 3); // Bottom shadow
       }
 
       // Draw player
