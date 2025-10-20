@@ -487,9 +487,9 @@
         squadMembers[2].formationOffsetY = radius;
         squadMembers[2].facingAngle = Math.PI / 2;  // Face down
       } else if (formationType === 'line') {
-        // Line: Shoulder-to-shoulder horizontal line, evenly spaced
+        // Line: Shoulder-to-shoulder horizontal line, evenly spaced beside the player
         const spacing = 50;
-        squadMembers[0].formationOffsetX = -spacing;
+        squadMembers[0].formationOffsetX = -spacing * 2;
         squadMembers[0].formationOffsetY = 0;
         squadMembers[0].facingAngle = -Math.PI / 2;  // Face up
         
@@ -497,7 +497,7 @@
         squadMembers[1].formationOffsetY = 0;
         squadMembers[1].facingAngle = -Math.PI / 2;  // Face up
         
-        squadMembers[2].formationOffsetX = 0;
+        squadMembers[2].formationOffsetX = -spacing;
         squadMembers[2].formationOffsetY = 0;
         squadMembers[2].facingAngle = -Math.PI / 2;  // Face up
       } else if (formationType === 'column') {
@@ -515,19 +515,18 @@
         squadMembers[2].formationOffsetY = spacing * 3;
         squadMembers[2].facingAngle = -Math.PI / 2;  // Face up
       } else if (formationType === 'spread') {
-        // Spread Out: Like Circle Up but with much larger spacing
-        const radius = 80;
-        squadMembers[0].formationOffsetX = -radius;
-        squadMembers[0].formationOffsetY = 0;
-        squadMembers[0].facingAngle = Math.PI;  // Face left
+        // Spread Out: Return to default wedge formation (acts as wedge reset)
+        squadMembers[0].formationOffsetX = -50;
+        squadMembers[0].formationOffsetY = 50;
+        squadMembers[0].facingAngle = 0;
         
-        squadMembers[1].formationOffsetX = radius;
-        squadMembers[1].formationOffsetY = 0;
-        squadMembers[1].facingAngle = 0;  // Face right
+        squadMembers[1].formationOffsetX = 50;
+        squadMembers[1].formationOffsetY = 50;
+        squadMembers[1].facingAngle = 0;
         
         squadMembers[2].formationOffsetX = 0;
-        squadMembers[2].formationOffsetY = radius;
-        squadMembers[2].facingAngle = Math.PI / 2;  // Face down
+        squadMembers[2].formationOffsetY = 80;
+        squadMembers[2].facingAngle = 0;
       }
     }
 
