@@ -249,19 +249,301 @@
     }
 
     // ========================================
-    // BUILDING GENERATION - MIDDLE EASTERN STYLE (SIMPLIFIED)
+    // BUILDING GENERATION - WALLED CITY
     // ========================================
-    // Generates Middle Eastern-style buildings with:
-    // - Simple rectangular walls, doors, and floors
-    // - Earth tone colors (stucco, adobe, terracotta)
-    // - Density based on distance from center (denser near center, sparse at edges)
-    // - Proper hitboxes and door functionality
-    // - NO decorative features (arches, windows, courtyards, parapets)
+    // Generates a walled city at the center of the map with:
+    // - Tall imposing walls (Maze Runner style)
+    // - 4 gates at center of each wall side (N, S, E, W)
+    // - Pentagon command building at city center
+    // - Houses only inside walls using modular design (walls, doors, floors)
+    // - Realistic road layout connecting gates
     function generateBuildings() {
-      // Clear buildings array - no buildings generated for minimal map test
       buildings = [];
       
-      console.log(`Generated ${buildings.length} simplified Middle Eastern-style buildings`);
+      const centerX = WORLD_SIZE / 2;
+      const centerY = WORLD_SIZE / 2;
+      
+      // City parameters
+      const cityRadius = 1200; // Large enough to explore but not covering entire map
+      const wallThickness = 30; // Thick imposing walls
+      const gateWidth = 100; // Wide gates for passage
+      
+      // ========================================
+      // 1. GENERATE CITY WALLS (4 sides with gates)
+      // ========================================
+      const wallColor = 'rgb(140, 120, 100)'; // Dark stone color
+      const wallHeight = wallThickness;
+      
+      // North wall (with gate at center)
+      buildings.push({
+        x: centerX - cityRadius,
+        y: centerY - cityRadius,
+        w: cityRadius - gateWidth / 2,
+        h: wallHeight,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0 // No door for walls
+      });
+      buildings.push({
+        x: centerX + gateWidth / 2,
+        y: centerY - cityRadius,
+        w: cityRadius - gateWidth / 2,
+        h: wallHeight,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0
+      });
+      
+      // South wall (with gate at center)
+      buildings.push({
+        x: centerX - cityRadius,
+        y: centerY + cityRadius - wallHeight,
+        w: cityRadius - gateWidth / 2,
+        h: wallHeight,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0
+      });
+      buildings.push({
+        x: centerX + gateWidth / 2,
+        y: centerY + cityRadius - wallHeight,
+        w: cityRadius - gateWidth / 2,
+        h: wallHeight,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0
+      });
+      
+      // West wall (with gate at center)
+      buildings.push({
+        x: centerX - cityRadius,
+        y: centerY - cityRadius,
+        w: wallThickness,
+        h: cityRadius - gateWidth / 2,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0
+      });
+      buildings.push({
+        x: centerX - cityRadius,
+        y: centerY + gateWidth / 2,
+        w: wallThickness,
+        h: cityRadius - gateWidth / 2,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0
+      });
+      
+      // East wall (with gate at center)
+      buildings.push({
+        x: centerX + cityRadius - wallThickness,
+        y: centerY - cityRadius,
+        w: wallThickness,
+        h: cityRadius - gateWidth / 2,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0
+      });
+      buildings.push({
+        x: centerX + cityRadius - wallThickness,
+        y: centerY + gateWidth / 2,
+        w: wallThickness,
+        h: cityRadius - gateWidth / 2,
+        wallColor: wallColor,
+        roofColor: 'rgb(120, 100, 80)',
+        floorColor: 'rgb(60, 50, 40)',
+        wallThickness: 6,
+        isWall: true,
+        doorX: -1000, doorY: -1000, doorW: 0, doorH: 0
+      });
+      
+      // ========================================
+      // 2. GENERATE PENTAGON COMMAND BUILDING AT CENTER
+      // ========================================
+      const pentagonRadius = 200;
+      const pentagonSides = 5;
+      const pentagonPoints = [];
+      
+      for (let i = 0; i < pentagonSides; i++) {
+        const angle = (i * 2 * Math.PI / pentagonSides) - Math.PI / 2;
+        pentagonPoints.push({
+          x: centerX + pentagonRadius * Math.cos(angle),
+          y: centerY + pentagonRadius * Math.sin(angle)
+        });
+      }
+      
+      // Store pentagon as special building (will render differently)
+      buildings.push({
+        x: centerX - pentagonRadius - 20,
+        y: centerY - pentagonRadius - 20,
+        w: (pentagonRadius + 20) * 2,
+        h: (pentagonRadius + 20) * 2,
+        wallColor: 'rgb(200, 170, 130)',
+        roofColor: 'rgb(180, 150, 110)',
+        floorColor: 'rgb(100, 80, 60)',
+        wallThickness: 8,
+        isPentagon: true,
+        pentagonPoints: pentagonPoints,
+        doorX: centerX - 25,
+        doorY: centerY + pentagonRadius - 10,
+        doorW: 50,
+        doorH: 10,
+        doorSide: 'south'
+      });
+      
+      // ========================================
+      // 3. GENERATE ROADS CONNECTING GATES
+      // ========================================
+      // Main cross roads from gate to gate (N-S and E-W)
+      // Roads are 80 units wide
+      const roadWidth = 80;
+      
+      // ========================================
+      // 4. GENERATE HOUSES WITHIN CITY WALLS
+      // ========================================
+      // Generate houses in blocks, avoiding the central pentagon and main roads
+      const houseMinDist = 300; // Keep houses away from center command building
+      const roadHalfWidth = roadWidth / 2;
+      
+      // Create grid of house blocks
+      const blockSize = 250;
+      const houseSpacing = 40;
+      
+      for (let bx = -4; bx <= 4; bx++) {
+        for (let by = -4; by <= 4; by++) {
+          const blockCenterX = centerX + bx * blockSize;
+          const blockCenterY = centerY + by * blockSize;
+          
+          // Skip if block is outside city walls
+          if (Math.abs(blockCenterX - centerX) > cityRadius - 150 || 
+              Math.abs(blockCenterY - centerY) > cityRadius - 150) {
+            continue;
+          }
+          
+          // Skip if block is too close to center pentagon
+          const distToCenter = Math.hypot(blockCenterX - centerX, blockCenterY - centerY);
+          if (distToCenter < houseMinDist) {
+            continue;
+          }
+          
+          // Skip if block is on main roads (N-S or E-W cross)
+          if (Math.abs(blockCenterX - centerX) < roadHalfWidth + 50 || 
+              Math.abs(blockCenterY - centerY) < roadHalfWidth + 50) {
+            continue;
+          }
+          
+          // Generate 2-3 houses per block
+          const housesInBlock = 2 + Math.floor(Math.random() * 2);
+          
+          for (let h = 0; h < housesInBlock; h++) {
+            const houseW = 100 + Math.random() * 80;
+            const houseH = 100 + Math.random() * 80;
+            const houseX = blockCenterX - blockSize / 2 + Math.random() * (blockSize - houseW - 40) + 20;
+            const houseY = blockCenterY - blockSize / 2 + Math.random() * (blockSize - houseH - 40) + 20;
+            
+            // Check for overlap with existing buildings
+            let overlap = false;
+            for (const other of buildings) {
+              if (houseX < other.x + other.w + houseSpacing && 
+                  houseX + houseW + houseSpacing > other.x &&
+                  houseY < other.y + other.h + houseSpacing && 
+                  houseY + houseH + houseSpacing > other.y) {
+                overlap = true;
+                break;
+              }
+            }
+            if (overlap) continue;
+            
+            // Determine door placement based on proximity to main roads
+            const distToNSRoad = Math.abs(houseX + houseW / 2 - centerX);
+            const distToEWRoad = Math.abs(houseY + houseH / 2 - centerY);
+            
+            let doorX, doorY, doorW, doorH, doorSide;
+            const doorSize = 35;
+            
+            if (distToNSRoad < distToEWRoad) {
+              // Face E-W road
+              if (houseY + houseH / 2 < centerY) {
+                // North of E-W road, door on south
+                doorSide = 'south';
+                doorW = doorSize;
+                doorH = 5;
+                doorX = houseX + (houseW / 2) - doorW / 2;
+                doorY = houseY + houseH;
+              } else {
+                // South of E-W road, door on north
+                doorSide = 'north';
+                doorW = doorSize;
+                doorH = 5;
+                doorX = houseX + (houseW / 2) - doorW / 2;
+                doorY = houseY - doorH;
+              }
+            } else {
+              // Face N-S road
+              if (houseX + houseW / 2 < centerX) {
+                // West of N-S road, door on east
+                doorSide = 'east';
+                doorW = 5;
+                doorH = doorSize;
+                doorX = houseX + houseW;
+                doorY = houseY + (houseH / 2) - doorH / 2;
+              } else {
+                // East of N-S road, door on west
+                doorSide = 'west';
+                doorW = 5;
+                doorH = doorSize;
+                doorX = houseX - doorW;
+                doorY = houseY + (houseH / 2) - doorH / 2;
+              }
+            }
+            
+            // Middle Eastern earth tone colors
+            const wallR = 210 + Math.random() * 20;
+            const wallG = 180 + Math.random() * 20;
+            const wallB = 140 + Math.random() * 20;
+            
+            buildings.push({
+              x: houseX,
+              y: houseY,
+              w: houseW,
+              h: houseH,
+              doorX: doorX,
+              doorY: doorY,
+              doorW: doorW,
+              doorH: doorH,
+              doorSide: doorSide,
+              wallColor: `rgb(${wallR}, ${wallG}, ${wallB})`,
+              roofColor: `rgb(${wallR - 30}, ${wallG - 30}, ${wallB - 30})`,
+              floorColor: `rgb(${wallR - 90}, ${wallG - 80}, ${wallB - 70})`,
+              wallThickness: 6,
+              isHouse: true
+            });
+          }
+        }
+      }
+      
+      console.log(`Generated walled city with ${buildings.length} structures (walls, gates, pentagon command center, and houses)`);
     }
 
     // ========================================
@@ -507,9 +789,9 @@
       }
 
       // ========================================
-      // DRAW BUILDINGS - MIDDLE EASTERN STYLE (SIMPLIFIED)
+      // DRAW BUILDINGS - WALLED CITY
       // ========================================
-      // Draw buildings with simple modular components: walls, doors, floors only
+      // Draw buildings: city walls, pentagon command center, and houses
       for (const b of buildings) {
         // Cull buildings outside viewport for performance
         const screenX = b.x - camera.x + W/2;
@@ -518,6 +800,85 @@
           continue;
         }
         
+        // Special rendering for pentagon command building
+        if (b.isPentagon && b.pentagonPoints) {
+          // Draw pentagon roof (with overhang effect)
+          ctx.fillStyle = b.roofColor;
+          ctx.beginPath();
+          b.pentagonPoints.forEach((p, i) => {
+            const ox = (p.x - (WORLD_SIZE / 2)) * 1.05 + (WORLD_SIZE / 2);
+            const oy = (p.y - (WORLD_SIZE / 2)) * 1.05 + (WORLD_SIZE / 2);
+            if (i === 0) ctx.moveTo(ox, oy);
+            else ctx.lineTo(ox, oy);
+          });
+          ctx.closePath();
+          ctx.fill();
+          
+          // Draw pentagon walls
+          ctx.fillStyle = b.wallColor;
+          ctx.beginPath();
+          b.pentagonPoints.forEach((p, i) => {
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          });
+          ctx.closePath();
+          ctx.fill();
+          
+          // Draw pentagon outline
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.lineWidth = b.wallThickness;
+          ctx.beginPath();
+          b.pentagonPoints.forEach((p, i) => {
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          });
+          ctx.closePath();
+          ctx.stroke();
+          
+          // Draw door
+          ctx.fillStyle = b.floorColor;
+          ctx.fillRect(b.doorX, b.doorY, b.doorW, b.doorH);
+          ctx.strokeStyle = 'rgba(80, 60, 40, 0.9)';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(b.doorX, b.doorY, b.doorW, b.doorH);
+          
+          continue;
+        }
+        
+        // Special rendering for walls (taller, more imposing)
+        if (b.isWall) {
+          // Draw wall with height effect (make it look tall)
+          ctx.fillStyle = b.wallColor;
+          ctx.fillRect(b.x, b.y, b.w, b.h);
+          
+          // Draw darker shade for depth
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.fillRect(b.x, b.y + b.h - 10, b.w, 10);
+          
+          // Draw wall outline (thick imposing outline)
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(b.x, b.y, b.w, b.h);
+          
+          // Add battlements effect on top of walls for Maze Runner style
+          const battlementSpacing = 60;
+          const battlementWidth = 30;
+          const battlementHeight = 8;
+          ctx.fillStyle = b.wallColor;
+          for (let i = 0; i < Math.max(b.w, b.h); i += battlementSpacing) {
+            if (b.w > b.h) {
+              // Horizontal wall
+              ctx.fillRect(b.x + i, b.y - battlementHeight, battlementWidth, battlementHeight);
+            } else {
+              // Vertical wall
+              ctx.fillRect(b.x - battlementHeight, b.y + i, battlementHeight, battlementWidth);
+            }
+          }
+          
+          continue;
+        }
+        
+        // Regular house rendering
         // 1. Draw flat roof (simple rectangle with overhang)
         ctx.fillStyle = b.roofColor;
         ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
