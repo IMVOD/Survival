@@ -393,6 +393,42 @@
         });
       }
       
+      // Calculate door positions for each side of the pentagon
+      // We'll place doors at the midpoint of each edge for easy access
+      const pentagonDoors = [];
+      for (let i = 0; i < pentagonSides; i++) {
+        const p1 = pentagonPoints[i];
+        const p2 = pentagonPoints[(i + 1) % pentagonSides];
+        
+        // Midpoint of the edge
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        
+        // Calculate edge direction to position door properly
+        const edgeDx = p2.x - p1.x;
+        const edgeDy = p2.y - p1.y;
+        const edgeLen = Math.hypot(edgeDx, edgeDy);
+        
+        // Door dimensions along the edge
+        const doorLength = 50; // Door width along the edge
+        const doorThickness = 10; // Door thickness perpendicular to edge
+        
+        // Calculate door rectangle based on edge orientation
+        // The door should be centered on the midpoint
+        const doorHalfLen = doorLength / 2;
+        const edgeUnitX = edgeDx / edgeLen;
+        const edgeUnitY = edgeDy / edgeLen;
+        
+        pentagonDoors.push({
+          midX: midX,
+          midY: midY,
+          edgeUnitX: edgeUnitX,
+          edgeUnitY: edgeUnitY,
+          length: doorLength,
+          thickness: doorThickness
+        });
+      }
+      
       // Store pentagon as special building (will render differently)
       buildings.push({
         x: centerX - pentagonRadius - 20,
@@ -405,6 +441,8 @@
         wallThickness: 8,
         isPentagon: true,
         pentagonPoints: pentagonPoints,
+        pentagonDoors: pentagonDoors,
+        // Keep old door for backwards compatibility with collision system
         doorX: centerX - 25,
         doorY: centerY + pentagonRadius - 10,
         doorW: 50,
@@ -418,128 +456,307 @@
       // Main cross roads from gate to gate (N-S and E-W)
       // Roads are 80 units wide
       const roadWidth = 80;
+      const roadHalfWidth = roadWidth / 2;
+      
+      // Secondary streets creating a grid pattern
+      // Positioned at regular intervals to create city blocks
+      const secondaryStreetWidth = 60;
+      const secondaryStreetSpacing = 400; // Every 400 units
+      const secondaryStreets = [];
+      
+      // Generate vertical secondary streets (parallel to N-S main road)
+      for (let offset = secondaryStreetSpacing; offset < cityRadius - 100; offset += secondaryStreetSpacing) {
+        // East side streets
+        secondaryStreets.push({
+          type: 'vertical',
+          x: centerX + offset,
+          width: secondaryStreetWidth
+        });
+        // West side streets
+        secondaryStreets.push({
+          type: 'vertical',
+          x: centerX - offset,
+          width: secondaryStreetWidth
+        });
+      }
+      
+      // Generate horizontal secondary streets (parallel to E-W main road)
+      for (let offset = secondaryStreetSpacing; offset < cityRadius - 100; offset += secondaryStreetSpacing) {
+        // South side streets
+        secondaryStreets.push({
+          type: 'horizontal',
+          y: centerY + offset,
+          width: secondaryStreetWidth
+        });
+        // North side streets
+        secondaryStreets.push({
+          type: 'horizontal',
+          y: centerY - offset,
+          width: secondaryStreetWidth
+        });
+      }
+      
+      // Narrow alleys for additional realism
+      const alleyWidth = 35;
+      const alleySpacing = 200; // Finer grid for alleys
+      const alleys = [];
+      
+      // Generate vertical alleys
+      for (let offset = alleySpacing; offset < cityRadius - 100; offset += alleySpacing) {
+        // Skip if too close to main road or secondary streets
+        let tooClose = Math.abs(offset) < roadHalfWidth + 80;
+        for (const street of secondaryStreets) {
+          if (street.type === 'vertical' && Math.abs((centerX + offset) - street.x) < 50) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (!tooClose) {
+          alleys.push({
+            type: 'vertical',
+            x: centerX + offset,
+            width: alleyWidth
+          });
+          alleys.push({
+            type: 'vertical',
+            x: centerX - offset,
+            width: alleyWidth
+          });
+        }
+      }
+      
+      // Generate horizontal alleys
+      for (let offset = alleySpacing; offset < cityRadius - 100; offset += alleySpacing) {
+        // Skip if too close to main road or secondary streets
+        let tooClose = Math.abs(offset) < roadHalfWidth + 80;
+        for (const street of secondaryStreets) {
+          if (street.type === 'horizontal' && Math.abs((centerY + offset) - street.y) < 50) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (!tooClose) {
+          alleys.push({
+            type: 'horizontal',
+            y: centerY + offset,
+            width: alleyWidth
+          });
+          alleys.push({
+            type: 'horizontal',
+            y: centerY - offset,
+            width: alleyWidth
+          });
+        }
+      }
       
       // ========================================
       // 4. GENERATE HOUSES WITHIN CITY WALLS
       // ========================================
-      // Generate houses in blocks, avoiding the central pentagon and main roads
-      const houseMinDist = 300; // Keep houses away from center command building
-      const roadHalfWidth = roadWidth / 2;
-      
-      // Create grid of house blocks
-      const blockSize = 250;
-      const houseSpacing = 40;
-      
-      for (let bx = -4; bx <= 4; bx++) {
-        for (let by = -4; by <= 4; by++) {
-          const blockCenterX = centerX + bx * blockSize;
-          const blockCenterY = centerY + by * blockSize;
-          
-          // Skip if block is outside city walls
-          if (Math.abs(blockCenterX - centerX) > cityRadius - 150 || 
-              Math.abs(blockCenterY - centerY) > cityRadius - 150) {
-            continue;
+      // Helper function to check if position is on a road/street/alley
+      function isOnStreet(x, y, margin = 0) {
+        // Check main roads
+        if (Math.abs(x - centerX) < roadHalfWidth + margin || 
+            Math.abs(y - centerY) < roadHalfWidth + margin) {
+          return true;
+        }
+        // Check secondary streets
+        for (const street of secondaryStreets) {
+          if (street.type === 'vertical' && Math.abs(x - street.x) < street.width / 2 + margin) {
+            return true;
           }
-          
-          // Skip if block is too close to center pentagon
-          const distToCenter = Math.hypot(blockCenterX - centerX, blockCenterY - centerY);
+          if (street.type === 'horizontal' && Math.abs(y - street.y) < street.width / 2 + margin) {
+            return true;
+          }
+        }
+        // Check alleys
+        for (const alley of alleys) {
+          if (alley.type === 'vertical' && Math.abs(x - alley.x) < alley.width / 2 + margin) {
+            return true;
+          }
+          if (alley.type === 'horizontal' && Math.abs(y - alley.y) < alley.width / 2 + margin) {
+            return true;
+          }
+        }
+        return false;
+      }
+      
+      // Helper function to find nearest street to a position
+      function findNearestStreet(x, y) {
+        let minDist = Infinity;
+        let nearestStreet = null;
+        
+        // Check main N-S road
+        const distToNS = Math.abs(x - centerX);
+        if (distToNS < minDist) {
+          minDist = distToNS;
+          nearestStreet = { type: 'vertical', x: centerX, width: roadWidth };
+        }
+        
+        // Check main E-W road
+        const distToEW = Math.abs(y - centerY);
+        if (distToEW < minDist) {
+          minDist = distToEW;
+          nearestStreet = { type: 'horizontal', y: centerY, width: roadWidth };
+        }
+        
+        // Check secondary streets
+        for (const street of secondaryStreets) {
+          if (street.type === 'vertical') {
+            const dist = Math.abs(x - street.x);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestStreet = street;
+            }
+          } else {
+            const dist = Math.abs(y - street.y);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestStreet = street;
+            }
+          }
+        }
+        
+        // Check alleys
+        for (const alley of alleys) {
+          if (alley.type === 'vertical') {
+            const dist = Math.abs(x - alley.x);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestStreet = alley;
+            }
+          } else {
+            const dist = Math.abs(y - alley.y);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestStreet = alley;
+            }
+          }
+        }
+        
+        return nearestStreet;
+      }
+      
+      // Generate houses along streets, avoiding the central pentagon
+      const houseMinDist = 300; // Keep houses away from center command building
+      const houseSpacing = 25;
+      const minHouseSize = 80;
+      const maxHouseSize = 140;
+      
+      // Generate houses in a more realistic pattern along streets
+      // We'll iterate through potential house locations in a grid
+      for (let x = centerX - cityRadius + 100; x < centerX + cityRadius - 100; x += 70) {
+        for (let y = centerY - cityRadius + 100; y < centerY + cityRadius - 100; y += 70) {
+          // Skip if too close to center pentagon
+          const distToCenter = Math.hypot(x - centerX, y - centerY);
           if (distToCenter < houseMinDist) {
             continue;
           }
           
-          // Skip if block is on main roads (N-S or E-W cross)
-          if (Math.abs(blockCenterX - centerX) < roadHalfWidth + 50 || 
-              Math.abs(blockCenterY - centerY) < roadHalfWidth + 50) {
+          // Skip if on a street (houses should be beside streets, not on them)
+          if (isOnStreet(x, y, 30)) {
             continue;
           }
           
-          // Generate 2-3 houses per block
-          const housesInBlock = 2 + Math.floor(Math.random() * 2);
+          // Only place houses if they're reasonably close to a street (within 150 units)
+          const nearestStreet = findNearestStreet(x, y);
+          if (!nearestStreet) continue;
           
-          for (let h = 0; h < housesInBlock; h++) {
-            const houseW = 100 + Math.random() * 80;
-            const houseH = 100 + Math.random() * 80;
-            const houseX = blockCenterX - blockSize / 2 + Math.random() * (blockSize - houseW - 40) + 20;
-            const houseY = blockCenterY - blockSize / 2 + Math.random() * (blockSize - houseH - 40) + 20;
-            
-            // Check for overlap with existing buildings
-            let overlap = false;
-            for (const other of buildings) {
-              if (houseX < other.x + other.w + houseSpacing && 
-                  houseX + houseW + houseSpacing > other.x &&
-                  houseY < other.y + other.h + houseSpacing && 
-                  houseY + houseH + houseSpacing > other.y) {
-                overlap = true;
-                break;
-              }
+          const distToStreet = nearestStreet.type === 'vertical' 
+            ? Math.abs(x - nearestStreet.x) 
+            : Math.abs(y - nearestStreet.y);
+          
+          if (distToStreet > 150) continue;
+          
+          // Randomly skip some positions for variety (not every spot needs a house)
+          if (Math.random() > 0.5) continue;
+          
+          // Create house with size variation
+          const houseW = minHouseSize + Math.random() * (maxHouseSize - minHouseSize);
+          const houseH = minHouseSize + Math.random() * (maxHouseSize - minHouseSize);
+          
+          // Add some randomness to position within the grid cell
+          const houseX = x - houseW / 2 + (Math.random() - 0.5) * 40;
+          const houseY = y - houseH / 2 + (Math.random() - 0.5) * 40;
+          
+          // Check for overlap with existing buildings
+          let overlap = false;
+          for (const other of buildings) {
+            if (houseX < other.x + other.w + houseSpacing && 
+                houseX + houseW + houseSpacing > other.x &&
+                houseY < other.y + other.h + houseSpacing && 
+                houseY + houseH + houseSpacing > other.y) {
+              overlap = true;
+              break;
             }
-            if (overlap) continue;
-            
-            // Determine door placement based on proximity to main roads
-            const distToNSRoad = Math.abs(houseX + houseW / 2 - centerX);
-            const distToEWRoad = Math.abs(houseY + houseH / 2 - centerY);
-            
-            let doorX, doorY, doorW, doorH, doorSide;
-            const doorSize = 35;
-            
-            if (distToNSRoad < distToEWRoad) {
-              // Face E-W road
-              if (houseY + houseH / 2 < centerY) {
-                // North of E-W road, door on south
-                doorSide = 'south';
-                doorW = doorSize;
-                doorH = 5;
-                doorX = houseX + (houseW / 2) - doorW / 2;
-                doorY = houseY + houseH;
-              } else {
-                // South of E-W road, door on north
-                doorSide = 'north';
-                doorW = doorSize;
-                doorH = 5;
-                doorX = houseX + (houseW / 2) - doorW / 2;
-                doorY = houseY - doorH;
-              }
-            } else {
-              // Face N-S road
-              if (houseX + houseW / 2 < centerX) {
-                // West of N-S road, door on east
-                doorSide = 'east';
-                doorW = 5;
-                doorH = doorSize;
-                doorX = houseX + houseW;
-                doorY = houseY + (houseH / 2) - doorH / 2;
-              } else {
-                // East of N-S road, door on west
-                doorSide = 'west';
-                doorW = 5;
-                doorH = doorSize;
-                doorX = houseX - doorW;
-                doorY = houseY + (houseH / 2) - doorH / 2;
-              }
-            }
-            
-            // Middle Eastern earth tone colors
-            const wallR = 210 + Math.random() * 20;
-            const wallG = 180 + Math.random() * 20;
-            const wallB = 140 + Math.random() * 20;
-            
-            buildings.push({
-              x: houseX,
-              y: houseY,
-              w: houseW,
-              h: houseH,
-              doorX: doorX,
-              doorY: doorY,
-              doorW: doorW,
-              doorH: doorH,
-              doorSide: doorSide,
-              wallColor: `rgb(${wallR}, ${wallG}, ${wallB})`,
-              roofColor: `rgb(${wallR - 30}, ${wallG - 30}, ${wallB - 30})`,
-              floorColor: `rgb(${wallR - 90}, ${wallG - 80}, ${wallB - 70})`,
-              wallThickness: 6,
-              isHouse: true
-            });
           }
+          if (overlap) continue;
+          
+          // Check if house would be on a street
+          if (isOnStreet(houseX + houseW / 2, houseY + houseH / 2, 30)) {
+            continue;
+          }
+          
+          // Orient door towards the nearest street
+          let doorX, doorY, doorW, doorH, doorSide;
+          const doorSize = 35;
+          
+          if (nearestStreet.type === 'vertical') {
+            // Nearest street is vertical, so door should face east or west
+            if (houseX + houseW / 2 < nearestStreet.x) {
+              // House is west of street, door on east side
+              doorSide = 'east';
+              doorW = 5;
+              doorH = doorSize;
+              doorX = houseX + houseW;
+              doorY = houseY + (houseH / 2) - doorH / 2;
+            } else {
+              // House is east of street, door on west side
+              doorSide = 'west';
+              doorW = 5;
+              doorH = doorSize;
+              doorX = houseX - doorW;
+              doorY = houseY + (houseH / 2) - doorH / 2;
+            }
+          } else {
+            // Nearest street is horizontal, so door should face north or south
+            if (houseY + houseH / 2 < nearestStreet.y) {
+              // House is north of street, door on south side
+              doorSide = 'south';
+              doorW = doorSize;
+              doorH = 5;
+              doorX = houseX + (houseW / 2) - doorW / 2;
+              doorY = houseY + houseH;
+            } else {
+              // House is south of street, door on north side
+              doorSide = 'north';
+              doorW = doorSize;
+              doorH = 5;
+              doorX = houseX + (houseW / 2) - doorW / 2;
+              doorY = houseY - doorH;
+            }
+          }
+          
+          // Middle Eastern earth tone colors
+          const wallR = 210 + Math.random() * 20;
+          const wallG = 180 + Math.random() * 20;
+          const wallB = 140 + Math.random() * 20;
+          
+          buildings.push({
+            x: houseX,
+            y: houseY,
+            w: houseW,
+            h: houseH,
+            doorX: doorX,
+            doorY: doorY,
+            doorW: doorW,
+            doorH: doorH,
+            doorSide: doorSide,
+            wallColor: `rgb(${wallR}, ${wallG}, ${wallB})`,
+            roofColor: `rgb(${wallR - 30}, ${wallG - 30}, ${wallB - 30})`,
+            floorColor: `rgb(${wallR - 90}, ${wallG - 80}, ${wallB - 70})`,
+            wallThickness: 6,
+            isHouse: true
+          });
         }
       }
       
@@ -553,6 +770,43 @@
     // Returns the building if collision, null if no collision
     function checkBuildingCollision(x, y, radius) {
       for (const b of buildings) {
+        // Special handling for pentagon with multiple doors
+        if (b.isPentagon && b.pentagonDoors) {
+          // Check if player is near any of the pentagon doors
+          for (const door of b.pentagonDoors) {
+            // Calculate if player is in door area
+            // Door area is a rectangle along the edge
+            const dx = x - door.midX;
+            const dy = y - door.midY;
+            
+            // Project position onto edge direction
+            const alongEdge = dx * door.edgeUnitX + dy * door.edgeUnitY;
+            const perpToEdge = -dx * door.edgeUnitY + dy * door.edgeUnitX;
+            
+            // Check if within door bounds
+            if (Math.abs(alongEdge) < door.length / 2 + radius && 
+                Math.abs(perpToEdge) < door.thickness / 2 + radius) {
+              return null; // Allow passage through door
+            }
+          }
+          
+          // Check if inside pentagon
+          const centerX = WORLD_SIZE / 2;
+          const centerY = WORLD_SIZE / 2;
+          const distToCenter = Math.hypot(x - centerX, y - centerY);
+          if (distToCenter < 180) { // Slightly less than pentagonRadius
+            return null; // Inside pentagon, no collision
+          }
+          
+          // Check collision with pentagon walls
+          if (x + radius > b.x && x - radius < b.x + b.w &&
+              y + radius > b.y && y - radius < b.y + b.h) {
+            return b;
+          }
+          
+          continue;
+        }
+        
         // Check if player is in door area (allow passage)
         const inDoorX = x + radius > b.doorX && x - radius < b.doorX + b.doorW;
         const inDoorY = y + radius > b.doorY && y - radius < b.doorY + b.doorH;
@@ -789,6 +1043,76 @@
       }
 
       // ========================================
+      // DRAW STREETS AND ALLEYS
+      // ========================================
+      const centerX = WORLD_SIZE / 2;
+      const centerY = WORLD_SIZE / 2;
+      const cityRadius = 1200;
+      
+      // Draw main cross roads (N-S and E-W)
+      const roadWidth = 80;
+      ctx.fillStyle = 'rgba(180, 150, 110, 0.7)';
+      
+      // North-South main road
+      ctx.fillRect(centerX - roadWidth / 2, centerY - cityRadius, roadWidth, cityRadius * 2);
+      
+      // East-West main road
+      ctx.fillRect(centerX - cityRadius, centerY - roadWidth / 2, cityRadius * 2, roadWidth);
+      
+      // Draw secondary streets
+      const secondaryStreetWidth = 60;
+      const secondaryStreetSpacing = 400;
+      ctx.fillStyle = 'rgba(175, 145, 105, 0.6)';
+      
+      for (let offset = secondaryStreetSpacing; offset < cityRadius - 100; offset += secondaryStreetSpacing) {
+        // Vertical streets
+        ctx.fillRect(centerX + offset - secondaryStreetWidth / 2, centerY - cityRadius, 
+                     secondaryStreetWidth, cityRadius * 2);
+        ctx.fillRect(centerX - offset - secondaryStreetWidth / 2, centerY - cityRadius, 
+                     secondaryStreetWidth, cityRadius * 2);
+        
+        // Horizontal streets
+        ctx.fillRect(centerX - cityRadius, centerY + offset - secondaryStreetWidth / 2, 
+                     cityRadius * 2, secondaryStreetWidth);
+        ctx.fillRect(centerX - cityRadius, centerY - offset - secondaryStreetWidth / 2, 
+                     cityRadius * 2, secondaryStreetWidth);
+      }
+      
+      // Draw alleys
+      const alleyWidth = 35;
+      const alleySpacing = 200;
+      ctx.fillStyle = 'rgba(165, 135, 95, 0.5)';
+      
+      for (let offset = alleySpacing; offset < cityRadius - 100; offset += alleySpacing) {
+        // Check if too close to main roads or secondary streets
+        let skipVertical = Math.abs(offset) < roadWidth / 2 + 80;
+        let skipHorizontal = Math.abs(offset) < roadWidth / 2 + 80;
+        
+        for (let secOffset = secondaryStreetSpacing; secOffset < cityRadius - 100; secOffset += secondaryStreetSpacing) {
+          if (Math.abs(offset - secOffset) < 50 || Math.abs(offset + secOffset) < 50) {
+            skipVertical = true;
+            skipHorizontal = true;
+          }
+        }
+        
+        if (!skipVertical) {
+          // Vertical alleys
+          ctx.fillRect(centerX + offset - alleyWidth / 2, centerY - cityRadius, 
+                       alleyWidth, cityRadius * 2);
+          ctx.fillRect(centerX - offset - alleyWidth / 2, centerY - cityRadius, 
+                       alleyWidth, cityRadius * 2);
+        }
+        
+        if (!skipHorizontal) {
+          // Horizontal alleys
+          ctx.fillRect(centerX - cityRadius, centerY + offset - alleyWidth / 2, 
+                       cityRadius * 2, alleyWidth);
+          ctx.fillRect(centerX - cityRadius, centerY - offset - alleyWidth / 2, 
+                       cityRadius * 2, alleyWidth);
+        }
+      }
+
+      // ========================================
       // DRAW BUILDINGS - WALLED CITY
       // ========================================
       // Draw buildings: city walls, pentagon command center, and houses
@@ -835,12 +1159,38 @@
           ctx.closePath();
           ctx.stroke();
           
-          // Draw door
-          ctx.fillStyle = b.floorColor;
-          ctx.fillRect(b.doorX, b.doorY, b.doorW, b.doorH);
-          ctx.strokeStyle = 'rgba(80, 60, 40, 0.9)';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(b.doorX, b.doorY, b.doorW, b.doorH);
+          // Draw all doors on the pentagon
+          if (b.pentagonDoors) {
+            ctx.fillStyle = b.floorColor;
+            ctx.strokeStyle = 'rgba(80, 60, 40, 0.9)';
+            ctx.lineWidth = 3;
+            
+            b.pentagonDoors.forEach(door => {
+              // Calculate door rectangle corners
+              const halfLen = door.length / 2;
+              const halfThick = door.thickness / 2;
+              
+              // Door corners in local coordinates (along edge and perpendicular)
+              const corners = [
+                { along: -halfLen, perp: -halfThick },
+                { along: halfLen, perp: -halfThick },
+                { along: halfLen, perp: halfThick },
+                { along: -halfLen, perp: halfThick }
+              ];
+              
+              // Transform to world coordinates
+              ctx.beginPath();
+              corners.forEach((corner, i) => {
+                const wx = door.midX + corner.along * door.edgeUnitX - corner.perp * door.edgeUnitY;
+                const wy = door.midY + corner.along * door.edgeUnitY + corner.perp * door.edgeUnitX;
+                if (i === 0) ctx.moveTo(wx, wy);
+                else ctx.lineTo(wx, wy);
+              });
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+            });
+          }
           
           continue;
         }
