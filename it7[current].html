@@ -3007,7 +3007,7 @@
       // FOG LAYER: Draw atmospheric fog in world space for proper layering
       // This fog is drawn BEFORE the fog of war and BEFORE ctx.restore()
       // so it integrates with the world layers and respects camera transformation
-      // Drawing fog here (after terrain/buildings but before entities complete) 
+      // Drawing fog here (after terrain/buildings but before dynamic entities) 
       // creates proper depth and atmospheric effect
       if (fogAlpha > 0) {
         // Calculate viewport bounds in world coordinates for efficient fog rendering
