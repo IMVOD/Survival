@@ -2822,29 +2822,42 @@
     }
 
     function draw() {
-      // RENDERING ORDER STRATEGY (Fixed and Clarified):
-      // 1. WORLD LAYER: Terrain, buildings, zombies, player, etc.
-      //    - Drawn with camera transformation (ctx.save() -> ctx.translate() -> ctx.restore())
+      // RENDERING ORDER STRATEGY (Updated for proper fog layering):
+      // 1. WORLD LAYER: Terrain, buildings, loot boxes
+      //    - Drawn with camera transformation (ctx.save() -> ctx.translate())
       //    - Affected by day/night brightness via ctx.globalAlpha
       //    - All world objects are drawn in world coordinates
       // 
-      // 2. FOG LAYER: Night fog overlay
-      //    - Drawn AFTER ctx.restore() to operate in screen space
-      //    - Covers entire viewport with semi-transparent overlay
-      //    - Obscures all world elements (zombies, player, terrain) during night
-      //    - Does NOT affect minimap (separate canvas) or other UI elements
+      // 2. FOG LAYER: Atmospheric night fog
+      //    - Drawn IN world coordinate space (before ctx.restore())
+      //    - Properly integrates with world layers and respects camera transformation
+      //    - Creates proper depth and atmospheric effect
+      //    - Layers between terrain/static objects and dynamic entities
       //
-      // 3. FLASHLIGHT LAYER: Optional flashlight effect
-      //    - Drawn in screen space after fog
+      // 3. FOG OF WAR: Unexplored area darkness
+      //    - Drawn in world coordinate space after atmospheric fog
+      //    - Covers tiles player hasn't discovered yet
+      //
+      // 4. DYNAMIC ENTITIES: Blood, particles, zombies, player, effects
+      //    - Drawn in world space after fog layers
+      //    - Appears through/above the atmospheric fog
+      //    - Creates proper depth perception
+      //
+      // 5. SCREEN SPACE TRANSITION: ctx.restore()
+      //    - Exits world coordinate space, returns to screen space
+      //
+      // 6. FLASHLIGHT LAYER: Optional flashlight effect (if enabled)
+      //    - Drawn in screen space
       //    - Uses composite operations to create visibility cone
       //
-      // 4. UI LAYER: Crosshair, minimap, HUD
+      // 7. UI LAYER: Crosshair, minimap, HUD
       //    - Drawn in screen space, always on top
       //    - Minimap uses separate canvas context (mmCtx), completely independent
       //    - Never affected by fog, brightness, or world transformations
       //
       // This layering ensures:
-      // - Fog properly obscures world objects during night/dusk/dawn
+      // - Fog properly integrates with world geometry and creates depth
+      // - Dynamic entities (zombies, player) render above fog for better visibility
       // - UI elements (especially minimap) remain fully visible at all times
       // - Clear separation between world space and screen space rendering
       
@@ -2878,8 +2891,9 @@
       //
       // IMPLEMENTATION NOTES:
       // - 'brightness' affects world layer rendering via ctx.globalAlpha
-      // - 'fogAlpha' controls fog overlay drawn in screen space after world layer
-      // - Both work together to create day/night atmosphere
+      // - 'fogAlpha' controls atmospheric fog overlay drawn in world space
+      // - Fog is drawn in world coordinates (before ctx.restore()) for proper layering
+      // - Both brightness and fog work together to create day/night atmosphere
       // - Neither affects UI elements (minimap, HUD) which remain fully visible
       const hour = 6 + (dayTime / DAY_LENGTH) * 24;
       let brightness = 1;
@@ -2989,6 +3003,25 @@
       }
 
       ctx.globalAlpha = 1;
+
+      // FOG LAYER: Draw atmospheric fog in world space for proper layering
+      // This fog is drawn BEFORE the fog of war and BEFORE ctx.restore()
+      // so it integrates with the world layers and respects camera transformation
+      // Drawing fog here (after terrain/buildings but before dynamic entities) 
+      // creates proper depth and atmospheric effect
+      if (fogAlpha > 0) {
+        // Calculate viewport bounds in world coordinates for efficient fog rendering
+        const fogMargin = 100; // Extra margin to cover edges during camera movement
+        const worldLeft = camera.x - W/2 - fogMargin;
+        const worldTop = camera.y - H/2 - fogMargin;
+        const worldRight = camera.x + W/2 + fogMargin;
+        const worldBottom = camera.y + H/2 + fogMargin;
+        
+        // Draw fog as world-space overlay covering visible area
+        // Using world coordinates ensures fog moves with camera and layers properly
+        ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
+        ctx.fillRect(worldLeft, worldTop, worldRight - worldLeft, worldBottom - worldTop);
+      }
 
       // Fog of war
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
@@ -3157,29 +3190,18 @@
       // End world coordinate space (with camera transformation)
       ctx.restore();
 
-      // FOG LAYER: Draw night fog effect AFTER restoring camera transform
-      // 
-      // WHY THIS WORKS:
-      // - ctx.restore() exits world coordinate space and returns to screen space
-      // - The fog is drawn as a semi-transparent rectangle covering the entire viewport
-      // - Since it's drawn in screen space (after ctx.restore()), it covers ALL world objects:
-      //   * Zombies (drawn in world layer)
-      //   * Player (drawn in world layer)
-      //   * Terrain and buildings (drawn in world layer)
-      // - The fog alpha varies by time of day:
+      // FOG LAYER NOTE: 
+      // Fog is now drawn in world coordinate space (before ctx.restore()) for proper layering
+      // This ensures fog integrates with map elements and respects scene depth
+      // The fog alpha varies by time of day:
       //   * Night (hour < 6 or >= 20): fogAlpha = 0.3 (dark, obscuring)
       //   * Dawn (6-8): fogAlpha gradually decreases (0.3 -> 0)
       //   * Day (8-18): fogAlpha = 0 (no fog, clear visibility)
       //   * Dusk (18-20): fogAlpha gradually increases (0 -> 0.3)
-      // - This fog does NOT affect:
+      // This fog does NOT affect:
       //   * Minimap (drawn on separate canvas mmCtx)
-      //   * HUD elements (drawn after fog layer)
-      //   * Crosshair (drawn after fog layer)
-      // - Drawing fog in screen space ensures consistent coverage regardless of camera position
-      if (fogAlpha > 0) {
-        ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
-        ctx.fillRect(0, 0, W, H);
-      }
+      //   * HUD elements (drawn in screen space after ctx.restore())
+      //   * Crosshair (drawn in screen space after ctx.restore())
 
       // FLASHLIGHT LAYER: Flashlight overlay in screen space
       // Drawn after fog layer but before UI elements
