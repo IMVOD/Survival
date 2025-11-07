@@ -2822,26 +2822,26 @@
     }
 
     function draw() {
-      // RENDERING ORDER STRATEGY (Updated for proper fog layering):
+      // RENDERING ORDER STRATEGY (Updated for proper fog occlusion):
       // 1. WORLD LAYER: Terrain, buildings, loot boxes
       //    - Drawn with camera transformation (ctx.save() -> ctx.translate())
       //    - Affected by day/night brightness via ctx.globalAlpha
       //    - All world objects are drawn in world coordinates
       // 
-      // 2. FOG LAYER: Atmospheric night fog
-      //    - Drawn IN world coordinate space (before ctx.restore())
-      //    - Properly integrates with world layers and respects camera transformation
-      //    - Creates proper depth and atmospheric effect
-      //    - Layers between terrain/static objects and dynamic entities
-      //
-      // 3. FOG OF WAR: Unexplored area darkness
-      //    - Drawn in world coordinate space after atmospheric fog
+      // 2. FOG OF WAR: Unexplored area darkness
+      //    - Drawn in world coordinate space
       //    - Covers tiles player hasn't discovered yet
       //
-      // 4. DYNAMIC ENTITIES: Blood, particles, zombies, player, effects
-      //    - Drawn in world space after fog layers
-      //    - Appears through/above the atmospheric fog
-      //    - Creates proper depth perception
+      // 3. DYNAMIC ENTITIES: Blood, particles, zombies, player, effects
+      //    - Drawn in world space after fog of war
+      //    - Includes all moving/animated game objects
+      //
+      // 4. FOG LAYER: Atmospheric night fog (CORRECTED POSITION)
+      //    - Drawn IN world coordinate space AFTER dynamic entities
+      //    - This ensures fog properly OCCLUDES zombies and NPCs
+      //    - Zombies become hidden/obscured when fogAlpha > 0 (night time)
+      //    - Properly integrates with camera transformation
+      //    - Creates realistic atmospheric depth
       //
       // 5. SCREEN SPACE TRANSITION: ctx.restore()
       //    - Exits world coordinate space, returns to screen space
@@ -2856,8 +2856,8 @@
       //    - Never affected by fog, brightness, or world transformations
       //
       // This layering ensures:
-      // - Fog properly integrates with world geometry and creates depth
-      // - Dynamic entities (zombies, player) render above fog for better visibility
+      // - Fog properly OCCLUDES dynamic entities (zombies hidden through fog)
+      // - Fog integrates with world geometry and creates atmospheric depth
       // - UI elements (especially minimap) remain fully visible at all times
       // - Clear separation between world space and screen space rendering
       
@@ -3003,25 +3003,6 @@
       }
 
       ctx.globalAlpha = 1;
-
-      // FOG LAYER: Draw atmospheric fog in world space for proper layering
-      // This fog is drawn BEFORE the fog of war and BEFORE ctx.restore()
-      // so it integrates with the world layers and respects camera transformation
-      // Drawing fog here (after terrain/buildings but before dynamic entities) 
-      // creates proper depth and atmospheric effect
-      if (fogAlpha > 0) {
-        // Calculate viewport bounds in world coordinates for efficient fog rendering
-        const fogMargin = 100; // Extra margin to cover edges during camera movement
-        const worldLeft = camera.x - W/2 - fogMargin;
-        const worldTop = camera.y - H/2 - fogMargin;
-        const worldRight = camera.x + W/2 + fogMargin;
-        const worldBottom = camera.y + H/2 + fogMargin;
-        
-        // Draw fog as world-space overlay covering visible area
-        // Using world coordinates ensures fog moves with camera and layers properly
-        ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
-        ctx.fillRect(worldLeft, worldTop, worldRight - worldLeft, worldBottom - worldTop);
-      }
 
       // Fog of war
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
@@ -3187,14 +3168,34 @@
                  player.y + Math.sin(player.angle) * (player.radius + 8));
       ctx.stroke();
 
+      // FOG LAYER: Draw atmospheric fog in world space AFTER all dynamic entities
+      // This fog is drawn AFTER zombies/player but BEFORE ctx.restore()
+      // so it properly occludes entities while still respecting camera transformation
+      // Drawing fog here (after all entities) ensures zombies are not visible through fog
+      if (fogAlpha > 0) {
+        // Calculate viewport bounds in world coordinates for efficient fog rendering
+        const fogMargin = 100; // Extra margin to cover edges during camera movement
+        const worldLeft = camera.x - W/2 - fogMargin;
+        const worldTop = camera.y - H/2 - fogMargin;
+        const worldRight = camera.x + W/2 + fogMargin;
+        const worldBottom = camera.y + H/2 + fogMargin;
+        
+        // Draw fog as world-space overlay covering visible area
+        // Using world coordinates ensures fog moves with camera and layers properly
+        // Drawing after entities ensures fog occludes zombies and NPCs correctly
+        ctx.fillStyle = `rgba(10,10,30,${fogAlpha})`;
+        ctx.fillRect(worldLeft, worldTop, worldRight - worldLeft, worldBottom - worldTop);
+      }
+
       // End world coordinate space (with camera transformation)
       ctx.restore();
 
       // FOG LAYER NOTE: 
-      // Fog is now drawn in world coordinate space (before ctx.restore()) for proper layering
-      // This ensures fog integrates with map elements and respects scene depth
+      // Fog is now drawn in world coordinate space AFTER all dynamic entities (zombies, player)
+      // but BEFORE ctx.restore(), ensuring proper layering and entity occlusion.
+      // This ensures fog properly occludes zombies and NPCs while respecting scene depth.
       // The fog alpha varies by time of day:
-      //   * Night (hour < 6 or >= 20): fogAlpha = 0.3 (dark, obscuring)
+      //   * Night (hour < 6 or >= 20): fogAlpha = 0.3 (dark, obscuring - zombies hidden)
       //   * Dawn (6-8): fogAlpha gradually decreases (0.3 -> 0)
       //   * Day (8-18): fogAlpha = 0 (no fog, clear visibility)
       //   * Dusk (18-20): fogAlpha gradually increases (0 -> 0.3)
