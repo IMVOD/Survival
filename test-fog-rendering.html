@@ -182,7 +182,13 @@ This ensures zombies are properly occluded by fog during nighttime.`);
       // Draw scene with fog
       drawTestScene(ctxFog, 0.3, canvasFog.width, canvasFog.height);
 
-      // Verify pixel difference
+      // Verify pixel difference with bounds checking
+      if (FOG_TEST_SAMPLE_X >= canvasNoFog.width || FOG_TEST_SAMPLE_Y >= canvasNoFog.height) {
+        failTest(2, "Test configuration error: sample coordinates out of bounds");
+        addDetails(2, `Sample point (${FOG_TEST_SAMPLE_X}, ${FOG_TEST_SAMPLE_Y}) exceeds canvas dimensions (${canvasNoFog.width}x${canvasNoFog.height})`);
+        return;
+      }
+
       const dataNoFog = ctxNoFog.getImageData(FOG_TEST_SAMPLE_X, FOG_TEST_SAMPLE_Y, 1, 1).data;
       const dataFog = ctxFog.getImageData(FOG_TEST_SAMPLE_X, FOG_TEST_SAMPLE_Y, 1, 1).data;
 
