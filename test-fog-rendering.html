@@ -69,6 +69,7 @@
     <h2>Test 2: Fog Occlusion Test (Visual)</h2>
     <div id="test2-result"></div>
     <div class="canvas-container">
+      <!-- Canvas dimensions set via width/height attributes (not CSS) to ensure correct pixel buffer size for getImageData() -->
       <canvas id="canvas-no-fog" width="400" height="300"></canvas>
       <div class="canvas-label">No Fog (Day - fogAlpha = 0)</div>
     </div>
@@ -83,6 +84,7 @@
     <h2>Test 3: Minimap Independence Validation</h2>
     <div id="test3-result"></div>
     <div class="canvas-container">
+      <!-- Minimap test canvas with same dimensions as game minimap (220x220) -->
       <canvas id="minimap-test" width="220" height="220"></canvas>
       <div class="canvas-label">Minimap (Separate Canvas)</div>
     </div>
@@ -102,6 +104,11 @@
   </div>
 
   <script>
+    // Test configuration constants
+    const FLOAT_TOLERANCE = 0.01; // Tolerance for floating point comparisons
+    const FOG_TEST_SAMPLE_X = 150; // X coordinate for fog pixel sampling
+    const FOG_TEST_SAMPLE_Y = 150; // Y coordinate for fog pixel sampling
+
     // Test utilities
     function passTest(testNum, message) {
       document.getElementById(`test${testNum}-result`).innerHTML = 
@@ -176,8 +183,8 @@ This ensures zombies are properly occluded by fog during nighttime.`);
       drawTestScene(ctxFog, 0.3, canvasFog.width, canvasFog.height);
 
       // Verify pixel difference
-      const dataNoFog = ctxNoFog.getImageData(150, 150, 1, 1).data;
-      const dataFog = ctxFog.getImageData(150, 150, 1, 1).data;
+      const dataNoFog = ctxNoFog.getImageData(FOG_TEST_SAMPLE_X, FOG_TEST_SAMPLE_Y, 1, 1).data;
+      const dataFog = ctxFog.getImageData(FOG_TEST_SAMPLE_X, FOG_TEST_SAMPLE_Y, 1, 1).data;
 
       const isDifferent = 
         dataNoFog[0] !== dataFog[0] || 
@@ -311,7 +318,7 @@ Architectural Benefits:
 
       for (const test of testCases) {
         const actual = calculateFogAlpha(test.hour);
-        const passed = Math.abs(actual - test.expected) < 0.01;
+        const passed = Math.abs(actual - test.expected) < FLOAT_TOLERANCE;
         allPassed = allPassed && passed;
         
         details += `Hour ${String(test.hour).padStart(2, '0')}:00 (${test.label}): `;

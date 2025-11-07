@@ -213,12 +213,12 @@ Result: Fog properly occludes zombies, creating atmospheric nighttime effect.
 - **Z-Index**: Base layer (0 or default)
 
 ### Minimap Canvas
-- **Element ID**: `minimapCanvas`
+- **Element ID**: `#minimapCanvas` (inside `#minimap` container)
 - **Context Variable**: `mmCtx`
 - **Purpose**: Navigation overview map
 - **Transformations**: None (screen space only)
 - **Fog Applied**: NO - separate canvas, separate context
-- **Z-Index**: 40 (above game canvas)
+- **Z-Index**: 40 (above game canvas, via parent `#minimap` container)
 - **Size**: 220x220 pixels
 
 ### Independence Guarantees

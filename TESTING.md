@@ -195,7 +195,7 @@ To manually verify fog behavior in the actual game:
 ### Test Minimap Independence
 
 1. During nighttime with heavy fog
-2. Verify minimap remains clearly visible in top-left corner
+2. Verify minimap remains clearly visible in top-right corner
 3. Minimap should show full colors and clarity
 4. Minimap should not be darkened by fog
 5. All minimap elements (player, buildings, terrain) should be visible
