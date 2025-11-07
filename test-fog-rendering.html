@@ -249,23 +249,54 @@ The fog layer (rgba(10,10,30,0.3)) successfully overlays entities.`);
       const minimap = document.getElementById('minimap-test');
       const mmCtx = minimap.getContext('2d');
 
-      // Draw minimap (simulating separate canvas)
-      mmCtx.fillStyle = '#000';
+      // Draw minimap background (dark but not pure black for better visibility)
+      mmCtx.fillStyle = '#0a0e14';
       mmCtx.fillRect(0, 0, 220, 220);
 
-      // Draw explored area
-      mmCtx.fillStyle = 'rgba(40,80,40,0.3)';
+      // Draw border
+      mmCtx.strokeStyle = 'rgba(0,255,136,0.3)';
+      mmCtx.lineWidth = 2;
+      mmCtx.strokeRect(0, 0, 220, 220);
+
+      // Draw explored area (more visible green)
+      mmCtx.fillStyle = 'rgba(40,120,40,0.5)';
       mmCtx.fillRect(20, 20, 180, 180);
 
-      // Draw building
-      mmCtx.fillStyle = 'rgba(120,90,70,0.8)';
-      mmCtx.fillRect(60, 60, 40, 30);
+      // Draw grid lines for better visibility
+      mmCtx.strokeStyle = 'rgba(0,255,136,0.1)';
+      mmCtx.lineWidth = 1;
+      for (let i = 50; i < 220; i += 50) {
+        mmCtx.beginPath();
+        mmCtx.moveTo(i, 0);
+        mmCtx.lineTo(i, 220);
+        mmCtx.stroke();
+        mmCtx.beginPath();
+        mmCtx.moveTo(0, i);
+        mmCtx.lineTo(220, i);
+        mmCtx.stroke();
+      }
 
-      // Draw player marker
+      // Draw multiple buildings for visual interest
+      mmCtx.fillStyle = 'rgba(139,90,70,0.9)';
+      mmCtx.fillRect(50, 50, 35, 30);
+      mmCtx.fillRect(140, 80, 30, 40);
+      mmCtx.fillRect(70, 130, 40, 25);
+
+      // Draw loot box marker
+      mmCtx.fillStyle = '#ffd700';
+      mmCtx.fillRect(155, 65, 4, 4);
+
+      // Draw player marker (larger and with outline)
       mmCtx.fillStyle = '#00ff88';
       mmCtx.beginPath();
-      mmCtx.arc(110, 110, 4, 0, Math.PI * 2);
+      mmCtx.arc(110, 110, 5, 0, Math.PI * 2);
       mmCtx.fill();
+      
+      mmCtx.strokeStyle = '#00ff88';
+      mmCtx.lineWidth = 2;
+      mmCtx.beginPath();
+      mmCtx.arc(110, 110, 8, 0, Math.PI * 2);
+      mmCtx.stroke();
 
       // Verify canvas is separate
       const isValid = minimap instanceof HTMLCanvasElement && 
