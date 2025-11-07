@@ -3302,11 +3302,18 @@
       // This separation ensures the minimap is ALWAYS visible and functional,
       // providing crucial navigation information even during night fog or other
       // visual effects that obscure the main game view.
+      //
+      // FIX: Use dynamic canvas dimensions instead of hardcoded 220x220
+      // The minimap can be toggled between 220x220 (normal) and 400x400 (expanded)
+      // Using actual canvas dimensions ensures correct rendering in both states
+      
+      const mapWidth = minimapCanvas.width;
+      const mapHeight = minimapCanvas.height;
       
       mmCtx.fillStyle = '#000';
-      mmCtx.fillRect(0, 0, 220, 220);
+      mmCtx.fillRect(0, 0, mapWidth, mapHeight);
 
-      const scale = 220 / WORLD_SIZE;
+      const scale = mapWidth / WORLD_SIZE;
 
       // Draw explored tiles
       for (const tile of exploredMap) {
